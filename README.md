@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trade Stack
 
-## Getting Started
+Trade Stack is a multi-tenant SaaS starter for field-service businesses: jobs, quotes, clients, receipts, timesheets, wages, and team management. It is built with **Next.js (App Router)**, **Supabase** (Auth + PostgreSQL), and is ready to deploy on **Vercel**.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. **Clone or copy** this project and install dependencies:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   ```bash
+   npm install
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. **Environment variables** — copy `.env.example` to `.env.local` and fill in your Supabase values:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   cp .env.example .env.local
+   ```
 
-## Learn More
+   Required keys:
 
-To learn more about Next.js, take a look at the following resources:
+   - `NEXT_PUBLIC_SUPABASE_URL` — Project URL from the Supabase dashboard (Settings → API).
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — `anon` `public` key (same page).
+   - `SUPABASE_SERVICE_ROLE_KEY` — `service_role` secret (server-only). Used for trusted bootstrap such as creating the tenant and owner profile after sign-up. **Never expose this in the browser.**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Run the dev server:**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   npm run dev
+   ```
 
-## Deploy on Vercel
+   Open [http://localhost:3000](http://localhost:3000). Unauthenticated visitors are sent to `/login`; after login, they land on `/dashboard`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. **Database** — Create tables in Supabase that match `src/types/database.ts` (or generate types from your schema). Enable **Row Level Security** and policies so each tenant only sees rows where `tenant_id` matches the current user’s profile. The app scopes server actions by `tenant_id` in code; RLS is still required for direct API access.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+5. **Node.js** — Prefer **Node 20+** (recommended by current Next.js and Supabase packages). The scaffold was generated with Next.js 14 for compatibility with environments on Node 18; you can upgrade to the latest Next.js once you are on Node 20+.
+
+## Supabase setup notes
+
+- In the [Supabase Dashboard](https://supabase.com/dashboard), select your project → **Settings** → **API**.
+- **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`.
+- **Project API keys** → use the `anon` `public` key for `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (keep server-side only).
+- **Auth** → configure email/password (and optional email confirmation). If confirmation is required, adjust the registration flow so users complete onboarding after verifying email.
+- **Database** — align tables with `src/types/database.ts`; link `public.users.id` to `auth.users.id` for the owner row created at registration.
+
+## Vercel deployment
+
+1. Push the repository to GitHub/GitLab/Bitbucket.
+2. In [Vercel](https://vercel.com), **Import** the repository.
+3. Framework preset: **Next.js** (see `vercel.json`).
+4. Add the same environment variables as in `.env.local` (including `SUPABASE_SERVICE_ROLE_KEY` as a server-only env var).
+5. Deploy. Vercel runs `npm install` and `npm run build` by default.
+
+## Project layout (high level)
+
+- `src/lib/supabase/` — Browser and server Supabase clients (`@supabase/ssr`), middleware session refresh, optional service-role client for bootstrap.
+- `src/middleware.ts` — Refreshes sessions; protects app routes; redirects `/login` ↔ `/dashboard` when appropriate.
+- `src/actions/` — Server Actions for auth, jobs, clients, quotes, etc., scoped by `tenant_id`.
+- `src/app/(auth)/` — Login and register.
+- `src/app/(dashboard)/` — Sidebar layout and feature pages.
+
+## Notes
+
+- `@supabase/auth-helpers-nextjs` is installed as requested; session handling uses `@supabase/ssr` (`createBrowserClient` / `createServerClient`) per current Supabase guidance.
+- Several UI flows include `TODO` comments where you will wire Storage uploads, PDFs, email, or Supabase invites.
