@@ -20,13 +20,13 @@ function LoginForm() {
     const form = new FormData(e.currentTarget);
     const email = String(form.get("email") ?? "");
     const password = String(form.get("password") ?? "");
-    const { error: err } = await signIn(email, password);
+    const { error: err, redirectTo } = await signIn(email, password);
     setPending(false);
     if (err) {
       setError(err);
       return;
     }
-    router.push(next);
+    router.push(redirectTo === "/mfa" ? "/mfa" : next);
     router.refresh();
   }
 

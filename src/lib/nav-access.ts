@@ -3,6 +3,7 @@ import type { UserRole } from "@/types/database";
 /** Sidebar routes each role may open (prefix match for detail pages). */
 export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
   owner: [
+    "/account/security",
     "/dashboard",
     "/jobs",
     "/quotes",
@@ -14,6 +15,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/settings",
   ],
   office: [
+    "/account/security",
     "/dashboard",
     "/jobs",
     "/quotes",
@@ -25,6 +27,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/settings",
   ],
   engineer: [
+    "/account/security",
     "/dashboard",
     "/jobs",
     "/quotes",
@@ -32,7 +35,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/receipts",
     "/timesheets",
   ],
-  viewer: ["/dashboard", "/jobs", "/quotes", "/clients"],
+  viewer: ["/account/security", "/dashboard", "/jobs", "/quotes", "/clients"],
 };
 
 export const NAV_ITEMS: { href: string; label: string }[] = [
@@ -45,6 +48,7 @@ export const NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/wages", label: "Wages" },
   { href: "/team", label: "Team" },
   { href: "/settings", label: "Settings" },
+  { href: "/account/security", label: "Security" },
 ];
 
 export function pathAllowedForRole(

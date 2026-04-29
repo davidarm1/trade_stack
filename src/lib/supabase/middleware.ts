@@ -2,9 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { User } from "@supabase/supabase-js";
 
+type AuthenticatorLevel = "aal1" | "aal2" | null;
+
 export async function updateSession(
   request: NextRequest,
-): Promise<{ response: NextResponse; user: User | null }> {
+): Promise<{
+  response: NextResponse;
+  user: User | null;
+  mfa: {
+    currentLevel: AuthenticatorLevel;
+    nextLevel: AuthenticatorLevel;
+  };
+}> {
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -36,7 +45,20 @@ export async function updateSession(
     data: { user },
   } = await supabase.auth.getUser();
 
-  return { response: supabaseResponse, user };
+  let mfa = {
+    currentLevel: null as AuthenticatorLevel,
+    nextLevel: null as AuthenticatorLevel,
+  };
+
+  if (user) {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    mfa = {
+      currentLevel: data?.currentLevel ?? null,
+      nextLevel: data?.nextLevel ?? null,
+    };
+  }
+
+  return { response: supabaseResponse, user, mfa };
 }
 
 function copyCookies(from: NextResponse, to: NextResponse) {

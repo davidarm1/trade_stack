@@ -75,6 +75,18 @@ async function requestAuditFields() {
   };
 }
 
+function normalizeMfaCode(code: string): string {
+  return code.replace(/\s+/g, "");
+}
+
+async function getVerifiedTotpFactor() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) return { factorId: null, error: error.message };
+  const factor = data.totp[0];
+  return { factorId: factor?.id ?? null, error: null };
+}
+
 export async function signIn(email: string, password: string) {
   const audit = await requestAuditFields();
   const normalizedEmail = email.trim().toLowerCase();
@@ -106,6 +118,9 @@ export async function signIn(email: string, password: string) {
     });
     return { data: null, error: error.message };
   }
+  if (!data.user) {
+    return { data: null, error: "Could not sign in." };
+  }
   const { data: profile } = await supabase
     .from("users")
     .select("tenant_id")
@@ -120,7 +135,127 @@ export async function signIn(email: string, password: string) {
     metadata: { email: normalizedEmail },
   });
   revalidatePath("/", "layout");
-  return { data, error: null };
+  const { data: factors, error: factorsError } =
+    await supabase.auth.mfa.listFactors();
+  if (factorsError) {
+    return { data: null, error: factorsError.message };
+  }
+  const redirectTo = factors.totp.length > 0 ? "/mfa" : "/dashboard";
+  return { data, error: null, redirectTo };
+}
+
+export async function getMfaStatus() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { data: null, error: "You must be signed in to manage MFA." };
+  }
+
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) return { data: null, error: error.message };
+
+  const factor = data.totp[0];
+  return {
+    data: {
+      enrolled: Boolean(factor),
+      factorId: factor?.id ?? null,
+    },
+    error: null,
+  };
+}
+
+export async function enrollMfa() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { data: null, error: "You must be signed in to enable MFA." };
+  }
+
+  const existing = await supabase.auth.mfa.listFactors();
+  if (existing.error) return { data: null, error: existing.error.message };
+  if (existing.data.totp.length > 0) {
+    return {
+      data: null,
+      error: "Two-factor authentication is already enabled.",
+    };
+  }
+
+  const { data, error } = await supabase.auth.mfa.enroll({
+    factorType: "totp",
+    friendlyName: "Trade Stack",
+    issuer: "Trade Stack",
+  });
+  if (error) return { data: null, error: error.message };
+
+  return {
+    data: {
+      factorId: data.id,
+      qrCode: data.totp.qr_code,
+      secret: data.totp.secret,
+    },
+    error: null,
+  };
+}
+
+export async function verifyMfaEnrollment(factorId: string, code: string) {
+  const token = normalizeMfaCode(code);
+  if (!factorId || !/^\d{6}$/.test(token)) {
+    return { data: null, error: "Enter the 6-digit code from your app." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.mfa.challengeAndVerify({
+    factorId,
+    code: token,
+  });
+  if (error) return { data: null, error: "Invalid code, please try again" };
+
+  revalidatePath("/account/security");
+  return { data: true, error: null };
+}
+
+export async function removeMfa(factorId: string) {
+  if (!factorId) {
+    return { data: null, error: "No MFA factor was found." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.mfa.unenroll({ factorId });
+  if (error) return { data: null, error: error.message };
+
+  revalidatePath("/account/security");
+  return { data: true, error: null };
+}
+
+export async function verifyMfaChallenge(code: string) {
+  const token = normalizeMfaCode(code);
+  if (!/^\d{6}$/.test(token)) {
+    return { data: null, error: "Invalid code, please try again" };
+  }
+
+  const { factorId, error: factorError } = await getVerifiedTotpFactor();
+  if (factorError || !factorId) {
+    return {
+      data: null,
+      error: factorError ?? "No two-factor authentication factor was found.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.mfa.challengeAndVerify({
+    factorId,
+    code: token,
+  });
+  if (error) return { data: null, error: "Invalid code, please try again" };
+
+  revalidatePath("/", "layout");
+  return { data: true, error: null };
 }
 
 export async function signUp(

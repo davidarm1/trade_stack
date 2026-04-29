@@ -5,8 +5,10 @@ import {
 } from "@/lib/supabase/middleware";
 
 const LOGIN_PATH = "/login";
+const MFA_PATH = "/mfa";
 
 const PROTECTED_PREFIXES = [
+  "/account",
   "/dashboard",
   "/jobs",
   "/clients",
@@ -39,10 +41,27 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const { response, user } = await updateSession(request);
+  const { response, user, mfa } = await updateSession(request);
+  const needsMfa = mfa.nextLevel === "aal2" && mfa.currentLevel !== "aal2";
 
   if (user && pathname === LOGIN_PATH) {
+    return redirectWithCookies(
+      request,
+      needsMfa ? MFA_PATH : "/dashboard",
+      response,
+    );
+  }
+
+  if (!user && pathname === MFA_PATH) {
+    return redirectWithCookies(request, LOGIN_PATH, response);
+  }
+
+  if (user && pathname === MFA_PATH && !needsMfa) {
     return redirectWithCookies(request, "/dashboard", response);
+  }
+
+  if (user && needsMfa && isProtectedPath(pathname)) {
+    return redirectWithCookies(request, MFA_PATH, response);
   }
 
   if (!user && isProtectedPath(pathname)) {
