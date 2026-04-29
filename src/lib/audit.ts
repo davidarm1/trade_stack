@@ -13,17 +13,17 @@ export async function logAuditEvent(args: {
   try {
     const admin = createServiceRoleClient();
     const auditEvent = {
-      tenant_id: args.tenant_id ?? null,
-      user_id: args.user_id ?? null,
-      event: args.event,
-      ip: args.ip ?? null,
-      user_agent: args.user_agent ?? null,
-      metadata: args.metadata ?? null,
+      p_tenant_id: args.tenant_id ?? null,
+      p_user_id: args.user_id ?? null,
+      p_event: args.event,
+      p_ip: args.ip ?? null,
+      p_user_agent: args.user_agent ?? null,
+      p_metadata: args.metadata ?? null,
     };
 
-    const { error } = await admin.from("audit_log").insert(auditEvent);
+    const { error } = await admin.rpc("insert_audit_log", auditEvent);
     if (error) {
-      console.error("[audit] insert failed:", {
+      console.error("[audit] insert RPC failed:", {
         message: error.message,
         code: error.code,
         details: error.details,
@@ -32,15 +32,15 @@ export async function logAuditEvent(args: {
       });
     }
   } catch (e) {
-    console.error("[audit] insert failed:", {
+    console.error("[audit] insert RPC failed:", {
       message: e instanceof Error ? e.message : "Unknown audit logging error",
       event: {
-        tenant_id: args.tenant_id ?? null,
-        user_id: args.user_id ?? null,
-        event: args.event,
-        ip: args.ip ?? null,
-        user_agent: args.user_agent ?? null,
-        metadata: args.metadata ?? null,
+        p_tenant_id: args.tenant_id ?? null,
+        p_user_id: args.user_id ?? null,
+        p_event: args.event,
+        p_ip: args.ip ?? null,
+        p_user_agent: args.user_agent ?? null,
+        p_metadata: args.metadata ?? null,
       },
     });
   }
