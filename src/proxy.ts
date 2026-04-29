@@ -6,6 +6,8 @@ import {
 
 const LOGIN_PATH = "/login";
 const MFA_PATH = "/mfa";
+const REQUIRED_MFA_SETUP_PATH = "/account/security?required=true";
+const SECURITY_PATH = "/account/security";
 
 const PROTECTED_PREFIXES = [
   "/account",
@@ -26,6 +28,14 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
+function isMfaAllowedPath(pathname: string): boolean {
+  return (
+    pathname === MFA_PATH ||
+    pathname === SECURITY_PATH ||
+    pathname.startsWith(`${SECURITY_PATH}/`)
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -41,13 +51,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const { response, user, mfa } = await updateSession(request);
-  const needsMfa = mfa.nextLevel === "aal2" && mfa.currentLevel !== "aal2";
+  const { response, user, role, mfa } = await updateSession(request);
+  const mandatoryMfa = role === "owner" || role === "office";
+  const needsMfaSetup = mandatoryMfa && !mfa.hasTotp;
+  const needsMfaChallenge =
+    mandatoryMfa && mfa.hasTotp && mfa.currentLevel !== "aal2";
 
   if (user && pathname === LOGIN_PATH) {
     return redirectWithCookies(
       request,
-      needsMfa ? MFA_PATH : "/dashboard",
+      needsMfaSetup
+        ? REQUIRED_MFA_SETUP_PATH
+        : needsMfaChallenge
+          ? MFA_PATH
+          : "/dashboard",
       response,
     );
   }
@@ -56,11 +73,25 @@ export async function proxy(request: NextRequest) {
     return redirectWithCookies(request, LOGIN_PATH, response);
   }
 
-  if (user && pathname === MFA_PATH && !needsMfa) {
+  if (user && pathname === MFA_PATH && !needsMfaChallenge) {
     return redirectWithCookies(request, "/dashboard", response);
   }
 
-  if (user && needsMfa && isProtectedPath(pathname)) {
+  if (
+    user &&
+    needsMfaSetup &&
+    isProtectedPath(pathname) &&
+    !isMfaAllowedPath(pathname)
+  ) {
+    return redirectWithCookies(request, REQUIRED_MFA_SETUP_PATH, response);
+  }
+
+  if (
+    user &&
+    needsMfaChallenge &&
+    isProtectedPath(pathname) &&
+    !isMfaAllowedPath(pathname)
+  ) {
     return redirectWithCookies(request, MFA_PATH, response);
   }
 

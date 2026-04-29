@@ -13,6 +13,7 @@ import {
   tenantPlanValue,
   type PackageId,
 } from "@/lib/plans";
+import type { UserRole } from "@/types/database";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -79,6 +80,10 @@ function normalizeMfaCode(code: string): string {
   return code.replace(/\s+/g, "");
 }
 
+function requiresMfa(role: UserRole | null | undefined): boolean {
+  return role === "owner" || role === "office";
+}
+
 async function getVerifiedTotpFactor() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.mfa.listFactors();
@@ -123,7 +128,7 @@ export async function signIn(email: string, password: string) {
   }
   const { data: profile } = await supabase
     .from("users")
-    .select("tenant_id")
+    .select("tenant_id, role")
     .eq("id", data.user.id)
     .maybeSingle();
   await logAuditEvent({
@@ -135,12 +140,18 @@ export async function signIn(email: string, password: string) {
     metadata: { email: normalizedEmail },
   });
   revalidatePath("/", "layout");
+
+  const role = (profile?.role as UserRole | null) ?? null;
+  if (!requiresMfa(role)) {
+    return { data, error: null, redirectTo: "/dashboard" };
+  }
+
   const { data: factors, error: factorsError } =
     await supabase.auth.mfa.listFactors();
-  if (factorsError) {
-    return { data: null, error: factorsError.message };
-  }
-  const redirectTo = factors.totp.length > 0 ? "/mfa" : "/dashboard";
+  if (factorsError) return { data: null, error: factorsError.message };
+
+  const redirectTo =
+    factors.totp.length > 0 ? "/mfa" : "/account/security?required=true";
   return { data, error: null, redirectTo };
 }
 

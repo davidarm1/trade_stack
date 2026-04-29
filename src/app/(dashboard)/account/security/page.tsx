@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   enrollMfa,
@@ -25,6 +26,9 @@ function qrCodeSrc(qrCode: string): string {
 }
 
 export default function AccountSecurityPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const required = searchParams.get("required") === "true";
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState("");
@@ -88,7 +92,12 @@ export default function AccountSecurityPage() {
     setStatus({ enrolled: true, factorId: enrollment.factorId });
     setEnrollment(null);
     setCode("");
-    setMessage("Two-factor authentication is now enabled.");
+    if (required) {
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      setMessage("Two-factor authentication is now enabled.");
+    }
   }
 
   async function handleRemove() {
@@ -118,6 +127,16 @@ export default function AccountSecurityPage() {
         Add an optional authenticator app code to protect your Trade Stack
         account.
       </p>
+
+      {required ? (
+        <div
+          className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900"
+          role="status"
+        >
+          Two-factor authentication is required for your account. Please set it
+          up to continue.
+        </div>
+      ) : null}
 
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">

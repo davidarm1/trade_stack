@@ -26,7 +26,14 @@ function LoginForm() {
       setError(err);
       return;
     }
-    router.push(redirectTo === "/mfa" ? "/mfa" : next);
+    if (
+      redirectTo === "/mfa" ||
+      redirectTo === "/account/security?required=true"
+    ) {
+      router.push(redirectTo);
+    } else {
+      router.push(next);
+    }
     router.refresh();
   }
 
