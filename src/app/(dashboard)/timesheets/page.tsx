@@ -6,13 +6,14 @@ import { TimesheetsFilters } from "./timesheets-filters";
 export default async function TimesheetsPage({
   searchParams,
 }: {
-  searchParams: { userId?: string; from?: string; to?: string };
+  searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
+  const params = await searchParams;
   const team = await getTeamMembers();
   const { data: rows, error } = await getTimesheets({
-    userId: searchParams.userId,
-    from: searchParams.from,
-    to: searchParams.to,
+    userId: params.userId,
+    from: params.from,
+    to: params.to,
   });
 
   if (error) {

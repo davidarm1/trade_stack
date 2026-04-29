@@ -18,7 +18,10 @@ export default async function SettingsPage() {
       <p className="mt-1 text-sm text-slate-600">
         Company profile and defaults for invoices and jobs.
       </p>
-      <SettingsForm tenant={data?.tenant ?? null} />
+      <SettingsForm
+        tenant={data?.tenant ?? null}
+        keyValues={data?.keyValues ?? {}}
+      />
     </div>
   );
 }

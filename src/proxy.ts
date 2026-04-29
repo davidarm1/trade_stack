@@ -24,9 +24,22 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-export async function middleware(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Never run Supabase session logic on Next internals or static assets.
+  // A broad matcher can hit paths like /__nextjs_* (dev); updateSession there
+  // can break RSC/dev tooling and yield a blank page.
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/__nextjs") ||
+    pathname.startsWith("/api") ||
+    pathname === "/favicon.ico"
+  ) {
+    return NextResponse.next();
+  }
+
+  const { response, user } = await updateSession(request);
 
   if (user && pathname === LOGIN_PATH) {
     return redirectWithCookies(request, "/dashboard", response);
@@ -46,8 +59,12 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
+// Use Next’s recommended negative lookahead so we never run on /_next/* (CSS/JS)
+// or /api. Also exclude /__nextjs/* (dev tooling); matching those caused a blank
+// page when session logic ran. Do NOT add matcher: "/" alone — in practice it can
+// widen to all requests and strip styles again.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next|__nextjs|favicon.ico).*)",
   ],
 };

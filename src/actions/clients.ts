@@ -12,7 +12,7 @@ type ClientInsert = Partial<
 export async function createClient(data: ClientInsert) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data: row, error } = await supabase
     .from("clients")
@@ -22,13 +22,58 @@ export async function createClient(data: ClientInsert) {
 
   if (error) return { data: null, error: error.message };
   revalidatePath("/clients");
+  revalidatePath("/jobs");
   return { data: row, error: null };
+}
+
+export async function searchClients(query: string) {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createSupabaseServerClient();
+
+  const raw = query.trim();
+  if (raw.length < 2) return { data: [] as Client[], error: null };
+
+  const safe = raw.replace(/[%_]/g, "");
+  if (safe.length < 2) return { data: [] as Client[], error: null };
+
+  const pattern = `%${safe}%`;
+  const base = () =>
+    supabase
+      .from("clients")
+      .select("*")
+      .eq("tenant_id", ctx.tenantId)
+      .is("deleted_at", null);
+
+  const [byCompany, byContact, byEmail] = await Promise.all([
+    base().ilike("company_name", pattern).order("company_name", { ascending: true }).limit(20),
+    base().ilike("contact_name", pattern).order("company_name", { ascending: true }).limit(20),
+    base().ilike("contact_email", pattern).order("company_name", { ascending: true }).limit(20),
+  ]);
+
+  const err =
+    byCompany.error ?? byContact.error ?? byEmail.error;
+  if (err) return { data: null, error: err.message };
+
+  const merged = new Map<string, Client>();
+  for (const row of [
+    ...(byCompany.data ?? []),
+    ...(byContact.data ?? []),
+    ...(byEmail.data ?? []),
+  ]) {
+    merged.set(row.id, row as Client);
+  }
+
+  const list = Array.from(merged.values()).sort((a, b) =>
+    a.company_name.localeCompare(b.company_name, undefined, { sensitivity: "base" }),
+  );
+  return { data: list.slice(0, 20), error: null };
 }
 
 export async function updateClient(id: string, data: ClientInsert) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data: row, error } = await supabase
     .from("clients")
@@ -47,7 +92,7 @@ export async function updateClient(id: string, data: ClientInsert) {
 export async function getClients() {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data: clients, error } = await supabase
     .from("clients")
@@ -83,7 +128,7 @@ export async function getClients() {
 export async function getClient(id: string) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
     .from("clients")

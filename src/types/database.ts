@@ -97,6 +97,10 @@ export interface Job {
   client_order_number: string | null;
   custom_invoice_number: string | null;
   custom_po_number: string | null;
+  /** Per-tenant sequence; allocated via next_job_number(tenant_id). */
+  job_number: number | null;
+  /** Previous system job id for search and display when set. */
+  legacy_ref: string | null;
   invoice_source: string | null;
   sent_to_engineer_at: string | null;
   received_from_engineer_at: string | null;
@@ -116,6 +120,61 @@ export interface Job {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  jobsheet_url: string | null;
+  signature_url: string | null;
+  signed_at: string | null;
+}
+
+/** B2 upload metadata (table tenant_files). */
+export interface TenantFile {
+  id: string;
+  tenant_id: string;
+  job_id: string | null;
+  file_type: string | null;
+  b2_key: string;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  public_url: string;
+  uploaded_at: string;
+  deleted_at: string | null;
+}
+
+/** OpenAI usage (table ai_usage). */
+export interface AiUsageRow {
+  id: string;
+  tenant_id: string;
+  feature: string;
+  model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cost_usd: number | null;
+  created_at: string;
+}
+
+/** Append-only history when an invoice is sent or resent (see job_invoice_send_log). */
+export interface JobInvoiceSendLog {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  sent_at: string;
+  sent_to_email: string | null;
+  created_at: string;
+}
+
+/** Versioned, immutable invoice PDF snapshots for a job. */
+export interface JobInvoiceVersion {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  version_no: number;
+  reason: string | null;
+  file_name: string;
+  b2_key: string;
+  public_url: string;
+  is_current: boolean;
+  created_by_id: string | null;
+  created_at: string;
 }
 
 export interface JobMaterial {
@@ -181,6 +240,9 @@ export interface Quote {
   deleted_at: string | null;
 }
 
+/** Stored as JSONB array on `receipts.line_items`; see `parseReceiptLineItems`. */
+export type ReceiptLineItemsJson = unknown;
+
 export interface Receipt {
   id: string;
   tenant_id: string;
@@ -193,6 +255,8 @@ export interface Receipt {
   due_date: string | null;
   supplier_name: string | null;
   supplier_reference: string | null;
+  /** Line rows for bookkeeper review / exports (JSON array). */
+  line_items?: ReceiptLineItemsJson | null;
   amount_net: number | null;
   amount_tax: number | null;
   amount_total: number | null;
@@ -263,4 +327,17 @@ export interface SettingRow {
   field_value: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MobileAccessToken {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  token_hash: string;
+  token_hint: string;
+  created_by_id: string | null;
+  expires_at: string;
+  revoked_at: string | null;
+  used_at: string | null;
+  created_at: string;
 }

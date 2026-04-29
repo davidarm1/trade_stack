@@ -1,18 +1,22 @@
 import { Suspense } from "react";
 import { getWages } from "@/actions/wages";
 import { getTeamMembers } from "@/actions/team";
+import { formatCurrency } from "@/lib/format-currency";
+import { getTenantCurrencyCode } from "@/lib/tenant-currency";
 import { ApprovalBadge, WagesFilters } from "./wages-filters";
 
 export default async function WagesPage({
   searchParams,
 }: {
-  searchParams: { userId?: string; from?: string; to?: string };
+  searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
+  const params = await searchParams;
+  const currencyCode = await getTenantCurrencyCode();
   const team = await getTeamMembers();
   const { data: rows, error } = await getWages({
-    userId: searchParams.userId,
-    periodFrom: searchParams.from,
-    periodTo: searchParams.to,
+    userId: params.userId,
+    periodFrom: params.from,
+    periodTo: params.to,
   });
 
   if (error) {
@@ -94,7 +98,9 @@ export default async function WagesPage({
                         "—"}
                     </td>
                     <td className="px-4 py-3 tabular-nums text-slate-700">
-                      {w.total_wage != null ? w.total_wage.toFixed(2) : "—"}
+                      {w.total_wage != null
+                        ? formatCurrency(w.total_wage, currencyCode)
+                        : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <ApprovalBadge status={w.approval_status} />

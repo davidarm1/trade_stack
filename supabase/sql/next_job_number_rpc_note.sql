@@ -1,0 +1,5 @@
+-- The Next.js app calls:
+--   supabase.rpc('next_job_number', { tenant_id: '<tenant uuid>' })
+--
+-- Install the function from next_job_number.sql (or migration 20260417140000).
+-- The parameter name must be exactly `tenant_id` to match src/actions/jobs.ts.

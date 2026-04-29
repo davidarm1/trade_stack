@@ -4,31 +4,34 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/actions/auth";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/quotes", label: "Quotes" },
-  { href: "/clients", label: "Clients" },
-  { href: "/receipts", label: "Receipts" },
-  { href: "/timesheets", label: "Timesheets" },
-  { href: "/wages", label: "Wages" },
-  { href: "/team", label: "Team" },
-  { href: "/settings", label: "Settings" },
-];
+import { navItemsForRole } from "@/lib/nav-access";
+import type { UserRole } from "@/types/database";
 
 export function DashboardShell({
   companyName,
+  logoUrl,
+  brandingShowLogo,
+  brandingShowCompanyName,
   userName,
+  userRole,
   children,
 }: {
   companyName: string | null;
+  logoUrl?: string | null;
+  /** When true and `logoUrl` is set, show the logo in sidebar / mobile header branding. */
+  brandingShowLogo?: boolean;
+  /** When true, show the company name alongside or instead of the logo (see branding settings). */
+  brandingShowCompanyName?: boolean;
   userName: string | null;
+  userRole: UserRole | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const nav = navItemsForRole(userRole);
+  const showLogo = Boolean(brandingShowLogo && logoUrl);
+  const showName = brandingShowCompanyName !== false;
 
   async function handleSignOut() {
     await signOut();
@@ -48,9 +51,19 @@ export function DashboardShell({
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Trade Stack
             </p>
-            <p className="truncate text-lg font-semibold text-slate-900">
-              {companyName ?? "Your company"}
-            </p>
+            {showLogo && logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt=""
+                className="mb-2 h-12 max-w-[200px] object-contain object-left"
+              />
+            ) : null}
+            {showName ? (
+              <p className="truncate text-lg font-semibold text-slate-900">
+                {companyName ?? "Your company"}
+              </p>
+            ) : null}
             <p className="truncate text-sm text-slate-600">{userName ?? "—"}</p>
           </div>
           <nav className="flex flex-1 flex-col gap-1">
@@ -105,8 +118,18 @@ export function DashboardShell({
           >
             Menu
           </button>
-          <span className="truncate text-sm font-semibold text-slate-900">
-            {companyName ?? "Trade Stack"}
+          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900">
+            {showLogo && logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt=""
+                className="h-8 w-auto max-w-[140px] shrink-0 object-contain"
+              />
+            ) : null}
+            {showName || !showLogo ? (
+              <span className="truncate">{companyName ?? "Trade Stack"}</span>
+            ) : null}
           </span>
         </header>
         <main className="flex-1 p-6">{children}</main>

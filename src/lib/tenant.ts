@@ -5,7 +5,7 @@ export type TenantContext =
   | { success: false; error: string };
 
 export async function getTenantContext(): Promise<TenantContext> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,

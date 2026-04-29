@@ -1,0 +1,8 @@
+open a terminal and run:
+
+cd ~/Documents/Trade_Stack
+npm run dev
+
+
+Then open your browser and go to:
+http://localhost:3000

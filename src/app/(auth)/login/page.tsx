@@ -9,6 +9,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/dashboard";
+  const resetSuccess = searchParams.get("reset") === "success";
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -36,7 +37,11 @@ function LoginForm() {
         <p className="mt-1 text-sm text-slate-600">
           Trade Stack — field service &amp; invoicing
         </p>
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+        <form
+          method="post"
+          onSubmit={handleSubmit}
+          className="mt-8 space-y-4"
+        >
           <div>
             <label
               htmlFor="email"
@@ -54,12 +59,20 @@ function LoginForm() {
             />
           </div>
           <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Password
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-700"
+              >
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-slate-900 underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               name="password"
@@ -69,6 +82,11 @@ function LoginForm() {
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
             />
           </div>
+          {resetSuccess && (
+            <p className="text-sm text-emerald-700" role="status">
+              Your password was updated. Sign in with your new password.
+            </p>
+          )}
           {error && (
             <p className="text-sm text-red-600" role="alert">
               {error}

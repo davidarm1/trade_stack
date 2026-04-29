@@ -6,10 +6,11 @@ import { ClientsSearch } from "./clients-search";
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: { q?: string };
+  searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
+  const params = await searchParams;
   const { data: rows, error } = await getClients();
-  const q = (searchParams.q ?? "").toLowerCase().trim();
+  const q = (params.q ?? "").toLowerCase().trim();
 
   if (error) {
     return (

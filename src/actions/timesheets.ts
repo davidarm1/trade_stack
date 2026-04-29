@@ -11,7 +11,7 @@ export async function getTimesheets(filters?: {
 }) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createClient();
+  const supabase = await createClient();
 
   let q = supabase
     .from("timesheets")
@@ -38,7 +38,7 @@ export async function getTimesheets(filters?: {
 export async function approveTimesheet(id: string) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: row, error } = await supabase
     .from("timesheets")
