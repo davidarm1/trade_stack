@@ -20,9 +20,117 @@ type Enrollment = {
   secret: string;
 };
 
+const AUTHENTICATOR_APPS = [
+  {
+    name: "Google Authenticator",
+    platforms: "iOS & Android",
+    links: [
+      {
+        label: "iOS",
+        href: "https://apps.apple.com/app/google-authenticator/id388497605",
+      },
+      {
+        label: "Android",
+        href: "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2",
+      },
+    ],
+  },
+  {
+    name: "Microsoft Authenticator",
+    platforms: "iOS & Android",
+    links: [
+      {
+        label: "iOS",
+        href: "https://apps.apple.com/app/microsoft-authenticator/id983156458",
+      },
+      {
+        label: "Android",
+        href: "https://play.google.com/store/apps/details?id=com.azure.authenticator",
+      },
+    ],
+  },
+  {
+    name: "Apple Passwords",
+    platforms: "iOS 18+ & Mac",
+    links: [],
+    note: "Built in, no download needed",
+  },
+  {
+    name: "Authy",
+    platforms: "iOS, Android & Desktop",
+    links: [
+      {
+        label: "iOS",
+        href: "https://apps.apple.com/app/authy/id494168017",
+      },
+      {
+        label: "Android",
+        href: "https://play.google.com/store/apps/details?id=com.authy.authy",
+      },
+    ],
+  },
+  {
+    name: "1Password",
+    platforms: "iOS, Android & Desktop",
+    links: [
+      {
+        label: "iOS",
+        href: "https://apps.apple.com/app/1password/id568903335",
+      },
+      {
+        label: "Android",
+        href: "https://play.google.com/store/apps/details?id=com.agilebits.onepassword",
+      },
+    ],
+  },
+];
+
 function qrCodeSrc(qrCode: string): string {
   if (qrCode.startsWith("data:")) return qrCode;
   return `data:image/svg+xml;utf-8,${encodeURIComponent(qrCode)}`;
+}
+
+function AuthenticatorApps() {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h3 className="text-sm font-semibold text-slate-900">
+        Compatible authenticator apps
+      </h3>
+      <p className="mt-1 text-sm text-slate-600">
+        Trade Stack works with any standard TOTP authenticator app.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {AUTHENTICATOR_APPS.map((app) => (
+          <div
+            key={app.name}
+            className="rounded-lg border border-slate-200 bg-white p-4"
+          >
+            <p className="text-sm font-semibold text-slate-900">{app.name}</p>
+            <p className="mt-1 text-xs text-slate-600">{app.platforms}</p>
+            {app.links.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {app.links.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Download for {link.label}
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs font-medium text-slate-700">
+                {app.note}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AccountSecurityPage() {
@@ -152,6 +260,7 @@ export default function AccountSecurityPage() {
             <p className="text-sm font-medium text-emerald-700">
               Two-Factor Authentication is enabled.
             </p>
+            <AuthenticatorApps />
             <button
               type="button"
               onClick={() => void handleRemove()}
@@ -193,6 +302,8 @@ export default function AccountSecurityPage() {
                     className="mt-3 h-48 w-48 rounded-lg border border-slate-200 bg-white p-2"
                   />
                 </div>
+
+                <AuthenticatorApps />
 
                 <div>
                   <p className="text-sm font-medium text-slate-700">
