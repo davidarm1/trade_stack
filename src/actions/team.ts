@@ -286,7 +286,7 @@ export async function generateMobileAccessToken(userId: string) {
   if (!target) return { data: null, error: "User not found." };
 
   const nowIso = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   await supabase
     .from("mobile_access_tokens")
     .update({ revoked_at: nowIso })
