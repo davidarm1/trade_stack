@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getSessionTenantOrError } from "@/lib/api-auth";
+import { normalizeCurrencyCode } from "@/lib/format-currency";
+import {
+  QUOTES_AI_PRICING_PROMPT_DEFAULT,
+  QUOTES_AI_PRICING_PROMPT_KEY,
+} from "@/lib/quotes-ai-pricing-prompt";
 import type { JobAiPrefill } from "@/types/job-ai-prefill";
 
 export const runtime = "nodejs";
@@ -10,21 +15,23 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 
 - title: short job title (string, required if any work is described)
 - description: fuller scope / notes (string, may be empty)
+- customer_type: "domestic" if this looks like a homeowner/private person, "business" if it looks like a company/commercial customer
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
-- labour_charge: number in GBP if a labour/day rate is clearly stated, else null
-- payment_terms_days: integer days if payment terms mentioned (e.g. 30 day invoice), else null
+- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide; null only if there is not enough information to make a reasonable estimate
+- payment_terms_days: 0 for domestic/private homeowner work; 30 for business/commercial work unless the message or tenant guide says otherwise
 - custom_po_number, legacy_ref: strings or null
-- new_company_name: billing/client company name if identifiable, else null
+- new_company_name: company name if a business is identifiable; otherwise use the person's/customer's name
 - new_contact_name, new_contact_email, new_contact_number: strings or null
 - new_address1, new_address2, new_town, new_postcode: client billing address if given, else empty string or null
 - new_site_address1, new_site_address2, new_site_town, new_site_postcode: only if site differs from billing; else null
-- new_payment_terms_days: integer or null (client default terms if distinct from job payment_terms_days)
+- new_payment_terms_days: same rule as payment_terms_days: 0 for domestic/private homeowner work; 30 for business/commercial work unless stated otherwise
 - new_notes: short internal notes about the client if implied, else null
 - assigned_engineer_name: first name or full name of engineer if the message assigns someone, else null
 
 If only a site address is given but it is clearly also the client premises, copy into new_* billing fields where appropriate.
-Prefer UK date formats when inferring date_onsite.`;
+Prefer UK date formats when inferring date_onsite.
+The user message includes "--- Tenant pricing / business rules ---" with this tenant's guide. Use it to estimate labour_charge for the job.`;
 
 function stripJsonFence(raw: string): string {
   let t = raw.trim();
@@ -63,11 +70,23 @@ function intOrNull(v: unknown): number | null {
   return Math.round(n);
 }
 
+function customerType(v: unknown): "business" | "domestic" {
+  return typeof v === "string" && v.trim().toLowerCase() === "business"
+    ? "business"
+    : "domestic";
+}
+
 function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
   const site1 = str(obj.site_address1);
   const site2 = str(obj.site_address2);
   const siteTown = str(obj.site_town);
   const sitePc = str(obj.site_postcode);
+  const inferredCustomerType = customerType(obj.customer_type);
+  const defaultPaymentTerms = inferredCustomerType === "business" ? 30 : 0;
+  const paymentTerms =
+    intOrNull(obj.payment_terms_days) ?? defaultPaymentTerms;
+  const newPaymentTerms =
+    intOrNull(obj.new_payment_terms_days) ?? paymentTerms;
 
   const prefill: JobAiPrefill = {
     title: str(obj.title).trim() || undefined,
@@ -78,7 +97,7 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
     site_town: siteTown.trim() || undefined,
     site_postcode: sitePc.trim() || undefined,
     labour_charge: numOrNull(obj.labour_charge),
-    payment_terms_days: intOrNull(obj.payment_terms_days),
+    payment_terms_days: paymentTerms,
     custom_po_number: strOrNull(obj.custom_po_number) ?? undefined,
     legacy_ref: strOrNull(obj.legacy_ref) ?? undefined,
     new_company_name: str(obj.new_company_name).trim() || undefined,
@@ -93,10 +112,14 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
     new_site_address2: str(obj.new_site_address2).trim() || undefined,
     new_site_town: str(obj.new_site_town).trim() || undefined,
     new_site_postcode: str(obj.new_site_postcode).trim() || undefined,
-    new_payment_terms_days: intOrNull(obj.new_payment_terms_days),
+    new_payment_terms_days: newPaymentTerms,
     new_notes: str(obj.new_notes).trim() || undefined,
     assigned_engineer_name: strOrNull(obj.assigned_engineer_name),
   };
+
+  if (!prefill.new_company_name && prefill.new_contact_name) {
+    prefill.new_company_name = prefill.new_contact_name;
+  }
 
   if (!prefill.new_site_address1 && !prefill.new_site_town && !prefill.new_site_postcode) {
     if (prefill.new_company_name || prefill.new_address1) {
@@ -154,6 +177,18 @@ export async function POST(request: Request) {
 
   const openai = new OpenAI({ apiKey });
   const model = "gpt-4o-mini";
+  const [{ data: settingRow }, { data: tenantRow }] = await Promise.all([
+    supabase
+      .from("settings")
+      .select("field_value")
+      .eq("tenant_id", tenantId)
+      .eq("field_key", QUOTES_AI_PRICING_PROMPT_KEY)
+      .maybeSingle(),
+    supabase.from("tenants").select("currency").eq("id", tenantId).maybeSingle(),
+  ]);
+  const masterPrompt =
+    settingRow?.field_value?.trim() || QUOTES_AI_PRICING_PROMPT_DEFAULT;
+  const tenantCurrency = normalizeCurrencyCode(tenantRow?.currency);
 
   let promptTokens: number | null = null;
   let completionTokens: number | null = null;
@@ -169,7 +204,7 @@ export async function POST(request: Request) {
         { role: "system", content: SYSTEM },
         {
           role: "user",
-          content: `Extract job fields from this client message:\n\n${text}`,
+          content: `--- Tenant pricing / business rules ---\n${masterPrompt}\n\n--- Customer message ---\n${text}\n\n--- Context ---\nDisplay currency (ISO 4217): ${tenantCurrency}. Estimate labour_charge as one number in this currency.`,
         },
       ],
     });
