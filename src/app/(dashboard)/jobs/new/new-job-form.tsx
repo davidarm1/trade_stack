@@ -213,11 +213,35 @@ export function NewJobForm({
       if (pt == null && newRow.payment_terms_days != null) {
         pt = newRow.payment_terms_days;
       }
+    } else if (!clientId && clientQuery.trim()) {
+      const customerName = clientQuery.trim();
+      const { data: newRow, error: createErr } = await createClient({
+        company_name: customerName,
+        contact_name: customerName,
+        address1: site1,
+        address2: site2,
+        town,
+        postcode,
+        site_address1: site1,
+        site_address2: site2,
+        site_town: town,
+        site_postcode: postcode,
+        payment_terms_days: pt,
+        is_active: true,
+      });
+
+      if (createErr || !newRow) {
+        setPending(false);
+        setError(createErr ?? "Could not create customer");
+        return;
+      }
+
+      clientId = newRow.id;
     }
 
     if (!clientId) {
       setPending(false);
-      setError("Search and select a client, or add a new client.");
+      setError("Enter a customer name, select a saved client, or add a new one.");
       return;
     }
 
@@ -259,7 +283,8 @@ export function NewJobForm({
         </label>
         <p className="mt-0.5 text-xs text-slate-500">
           Type at least 2 characters to search. Pick a match to auto-fill site
-          details, or add a new client.
+          details, or type a homeowner/customer name to create them with this
+          job.
         </p>
         <input
           type="text"
@@ -334,7 +359,7 @@ export function NewJobForm({
                 setClientQuery("");
               }}
             >
-              Can’t find them? Add new client
+              Need full details? Add new client
             </button>
           )}
         </div>
