@@ -76,6 +76,79 @@ function customerType(v: unknown): "business" | "domestic" {
     : "domestic";
 }
 
+function extractPhone(text: string): string | undefined {
+  const match = text.match(/(?:\+44\s?|0)(?:\d[\s-]?){9,10}\d/u);
+  return match?.[0]?.replace(/\s+/g, " ").trim();
+}
+
+function extractPostcode(text: string): string | undefined {
+  const match = text.match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/iu);
+  return match?.[0]?.toUpperCase().replace(/\s+/u, " ").trim();
+}
+
+function extractCustomerName(text: string): string | undefined {
+  const patterns = [
+    /\bmy name is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/u,
+    /\bthis is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/u,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const name = match?.[1]?.trim();
+    if (name) return name;
+  }
+  return undefined;
+}
+
+function extractAddressParts(text: string): {
+  address1?: string;
+  town?: string;
+  postcode?: string;
+} {
+  const postcode = extractPostcode(text);
+  const addressMatch = text.match(
+    /\b(?:address is|at|address:)\s+([^.\n]+?)(?:\.|$)/iu,
+  );
+  const rawAddress = addressMatch?.[1]?.trim();
+  const parts = rawAddress
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const address1 = parts?.[0];
+  const town =
+    parts && parts.length > 1
+      ? parts[1]
+      : text.match(/\bbased in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/u)?.[1];
+
+  return { address1, town, postcode };
+}
+
+function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill {
+  const contactName = prefill.new_contact_name ?? extractCustomerName(sourceText);
+  const phone = prefill.new_contact_number ?? extractPhone(sourceText);
+  const address = extractAddressParts(sourceText);
+  const description = prefill.description?.trim() || sourceText;
+
+  return {
+    ...prefill,
+    description,
+    new_company_name: prefill.new_company_name ?? contactName,
+    new_contact_name: contactName,
+    new_contact_number: phone,
+    site_address1: prefill.site_address1 ?? address.address1,
+    site_town: prefill.site_town ?? address.town,
+    site_postcode: prefill.site_postcode ?? address.postcode,
+    new_address1: prefill.new_address1 ?? address.address1,
+    new_town: prefill.new_town ?? address.town,
+    new_postcode: prefill.new_postcode ?? address.postcode,
+    new_site_address1: prefill.new_site_address1 ?? address.address1,
+    new_site_town: prefill.new_site_town ?? address.town,
+    new_site_postcode: prefill.new_site_postcode ?? address.postcode,
+    payment_terms_days: prefill.payment_terms_days ?? 0,
+    new_payment_terms_days: prefill.new_payment_terms_days ?? 0,
+  };
+}
+
 function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
   const site1 = str(obj.site_address1);
   const site2 = str(obj.site_address2);
@@ -216,7 +289,7 @@ export async function POST(request: Request) {
 
     const raw = completion.choices[0]?.message?.content ?? "";
     const obj = JSON.parse(stripJsonFence(raw)) as Record<string, unknown>;
-    prefill = toPrefill(obj);
+    prefill = applyFallbacks(toPrefill(obj), text);
     if (!prefill.title?.trim()) {
       prefill = null;
       parseError = "Could not infer a job title from the message.";
