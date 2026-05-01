@@ -10,7 +10,6 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 
 - title: short job title (string, required if any work is described)
 - description: fuller scope / notes (string, may be empty)
-- job_type: e.g. repair, install, survey (string or null)
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
 - labour_charge: number in GBP if a labour/day rate is clearly stated, else null
@@ -73,7 +72,6 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
   const prefill: JobAiPrefill = {
     title: str(obj.title).trim() || undefined,
     description: str(obj.description).trim() || undefined,
-    job_type: strOrNull(obj.job_type) ?? undefined,
     date_onsite: strOrNull(obj.date_onsite),
     site_address1: site1.trim() || undefined,
     site_address2: site2.trim() || undefined,

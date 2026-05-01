@@ -68,7 +68,6 @@ export function EditJobForm({
     const { error: updateErr } = await updateJob(initial.id, {
       title,
       description: asNullableText("description"),
-      job_type: asNullableText("job_type"),
       status: asNullableText("status"),
       assigned_engineer_id: asNullableText("assigned_engineer_id"),
       date_onsite: asNullableText("date_onsite"),
@@ -122,33 +121,21 @@ export function EditJobForm({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Job type
-          </label>
-          <input
-            name="job_type"
-            defaultValue={initial.job_type ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Status
-          </label>
-          <select
-            name="status"
-            defaultValue={initial.status ?? "open"}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Status
+        </label>
+        <select
+          name="status"
+          defaultValue={initial.status ?? "open"}
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        >
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -153,7 +153,6 @@ export function NewJobForm({
     const form = new FormData(e.currentTarget);
     const title = String(form.get("title") || "");
     const description = String(form.get("description") || "");
-    const job_type = String(form.get("job_type") || "") || null;
     const assigned = String(form.get("assigned_engineer_id") || "");
     const date_onsite = String(form.get("date_onsite") || "") || null;
     const labour = form.get("labour_charge");
@@ -252,7 +251,6 @@ export function NewJobForm({
       client_id: clientId,
       title,
       description,
-      job_type,
       assigned_engineer_id: assigned || null,
       date_onsite,
       site_address1: site1,
@@ -559,17 +557,6 @@ export function NewJobForm({
           name="description"
           rows={4}
           defaultValue={prefill?.description ?? ""}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700">
-          Job type
-        </label>
-        <input
-          name="job_type"
-          placeholder="e.g. repair, install"
-          defaultValue={prefill?.job_type ?? ""}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>
