@@ -63,7 +63,7 @@ async function validateLinkedJobContext(args: {
     const { data: job, error } = await args.session.supabase
       .from("jobs")
       .select(
-        "id, client_id, assigned_engineer_id, signed_at, invoice_paid_at, deleted_at",
+        "id, client_id, assigned_engineer_id, invoice_paid_at, deleted_at",
       )
       .eq("id", jobId)
       .eq("tenant_id", args.session.tenantId)
@@ -75,7 +75,7 @@ async function validateLinkedJobContext(args: {
         response: NextResponse.json({ error: error.message }, { status: 500 }),
       };
     }
-    if (!job || job.deleted_at || job.signed_at || job.invoice_paid_at) {
+    if (!job || job.deleted_at || job.invoice_paid_at) {
       return {
         ok: false,
         response: NextResponse.json(
@@ -190,6 +190,15 @@ async function runReceiptOcrAfterUpload(args: {
   const openai = new OpenAI({ apiKey });
   const model = "gpt-4o-mini";
 
+  console.log("[scan-receipt] OCR starting", {
+    receiptId,
+    tenantId,
+    fileName,
+    mime,
+    isPdf,
+    url,
+  });
+
   let parsed: Parsed | null = null;
   let scanConfidence: "high" | "low" | "failed" = "failed";
   let promptTokens: number | null = null;
@@ -257,6 +266,14 @@ async function runReceiptOcrAfterUpload(args: {
     console.error("[scan-receipt] OpenAI request failed:", e);
     completionRaw = "";
   }
+
+  console.log("[scan-receipt] OCR response received", {
+    receiptId,
+    hasOutput: completionRaw.length > 0,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  });
 
   if (completionRaw) {
     try {
@@ -376,6 +393,13 @@ async function runReceiptOcrAfterUpload(args: {
       "[scan-receipt] receipt OCR update failed:",
       updateErr.message,
     );
+  } else {
+    console.log("[scan-receipt] receipt OCR update complete", {
+      receiptId,
+      scanConfidence,
+      supplierName: parsed?.supplier_name ?? null,
+      totalAmount: parsed?.total_amount ?? null,
+    });
   }
 }
 
@@ -511,6 +535,16 @@ async function processUploadedObjectInBackground(args: {
   const { tenantId, userId, linkedContext, key, url, mime, fileName } = args;
   const ext = extFromName(fileName);
 
+  console.log("[scan-receipt] background finalize starting", {
+    tenantId,
+    userId,
+    linkedContext,
+    key,
+    url,
+    mime,
+    fileName,
+  });
+
   let supa: SupabaseClient;
   try {
     supa = createServiceRoleClient();
@@ -534,6 +568,12 @@ async function processUploadedObjectInBackground(args: {
     );
     return;
   }
+
+  console.log("[scan-receipt] tenant_files row created", {
+    tenantId,
+    key,
+    linkedContext,
+  });
 
   const now = new Date().toISOString();
   const { data: receiptRow, error: recErr } = await supa
@@ -563,12 +603,23 @@ async function processUploadedObjectInBackground(args: {
     return;
   }
 
+  console.log("[scan-receipt] receipt row created", {
+    receiptId: receiptRow.id,
+    tenantId,
+    linkedContext,
+  });
+
   let buf: Buffer;
   try {
     const downloaded = await fetch(url, { cache: "no-store" });
     if (!downloaded.ok)
       throw new Error(`download failed: ${downloaded.status}`);
     buf = Buffer.from(await downloaded.arrayBuffer());
+    console.log("[scan-receipt] uploaded object downloaded for OCR", {
+      receiptId: receiptRow.id,
+      bytes: buf.length,
+      url,
+    });
   } catch (e) {
     console.error("[scan-receipt] failed to download uploaded object:", e);
     return;

@@ -47,7 +47,7 @@ async function validateLinkedJobContext(args: {
     const { data: job, error } = await args.session.supabase
       .from("jobs")
       .select(
-        "id, client_id, assigned_engineer_id, status, signed_at, invoice_paid_at, deleted_at",
+        "id, client_id, assigned_engineer_id, status, invoice_paid_at, deleted_at",
       )
       .eq("id", jobId)
       .eq("tenant_id", args.session.tenantId)
@@ -59,7 +59,7 @@ async function validateLinkedJobContext(args: {
         response: NextResponse.json({ error: error.message }, { status: 500 }),
       };
     }
-    if (!job || job.deleted_at || job.signed_at || job.invoice_paid_at) {
+    if (!job || job.deleted_at || job.invoice_paid_at) {
       return {
         ok: false,
         response: NextResponse.json(
