@@ -78,13 +78,12 @@ export default async function Page({
   const invoiceVersions = invoiceVersionsRes.data ?? [];
   const currentInvoiceVersion = invoiceVersions.find((v) => v.is_current) ?? null;
 
-
   if (error || !data) {
     notFound();
   }
 
   const currencyCode = await getTenantCurrencyCode();
-  const { job, materials, completion, images } = data;
+  const { job, materials, completion, images, receipts } = data;
   const j = job as Record<string, unknown> & {
     id: string;
     job_number?: number | null;
@@ -198,7 +197,9 @@ export default async function Page({
           jobNumber={jobNo}
           jobTitle={titleStr}
           assignedEngineerId={
-            typeof j.assigned_engineer_id === "string" ? j.assigned_engineer_id : null
+            typeof j.assigned_engineer_id === "string"
+              ? j.assigned_engineer_id
+              : null
           }
           sentToEngineerAt={j.sent_to_engineer_at ?? null}
           receivedFromEngineerAt={
@@ -242,7 +243,9 @@ export default async function Page({
               </div>
               <div>
                 <dt className="text-slate-500">Payment status</dt>
-                <dd className="text-slate-900">{String(j.payment_status ?? "—")}</dd>
+                <dd className="text-slate-900">
+                  {String(j.payment_status ?? "—")}
+                </dd>
               </div>
               <div>
                 <dt className="text-slate-500">Date onsite</dt>
@@ -252,7 +255,9 @@ export default async function Page({
               </div>
               <div>
                 <dt className="text-slate-500">Time onsite</dt>
-                <dd className="text-slate-900">{String(j.time_onsite ?? "—")}</dd>
+                <dd className="text-slate-900">
+                  {String(j.time_onsite ?? "—")}
+                </dd>
               </div>
             </dl>
             <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap">
@@ -261,7 +266,9 @@ export default async function Page({
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Client & Site</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Client & Site
+            </h2>
             <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-slate-500">Client</dt>
@@ -289,7 +296,9 @@ export default async function Page({
               <div>
                 <dt className="text-slate-500">PO number</dt>
                 <dd className="text-slate-900">
-                  {j.custom_po_number?.trim() ? String(j.custom_po_number) : "—"}
+                  {j.custom_po_number?.trim()
+                    ? String(j.custom_po_number)
+                    : "—"}
                 </dd>
               </div>
               <div>
@@ -322,13 +331,17 @@ export default async function Page({
               </div>
               <div>
                 <dt className="text-slate-500">Payment terms (days)</dt>
-                <dd className="text-slate-900">{String(j.payment_terms_days ?? "—")}</dd>
+                <dd className="text-slate-900">
+                  {String(j.payment_terms_days ?? "—")}
+                </dd>
               </div>
             </dl>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Invoice & Workflow</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Invoice & Workflow
+            </h2>
             <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-slate-500">Custom invoice number</dt>
@@ -387,7 +400,6 @@ export default async function Page({
               </div>
             </dl>
           </section>
-
         </div>
 
         <InvoicePreviewPanel
@@ -399,20 +411,29 @@ export default async function Page({
             custom_po_number: j.custom_po_number ?? null,
             client_order_number: j.client_order_number ?? null,
             payment_terms_days:
-              typeof j.payment_terms_days === "number" ? j.payment_terms_days : null,
+              typeof j.payment_terms_days === "number"
+                ? j.payment_terms_days
+                : null,
             labour_charge:
               typeof j.labour_charge === "number" ? j.labour_charge : null,
-            materials: materials.map((m: { description?: string | null; quantity?: number | null; unit_price?: number | null }) => ({
-              description: String(m.description ?? ""),
-              quantity:
-                typeof m.quantity === "number" && Number.isFinite(m.quantity)
-                  ? m.quantity
-                  : 1,
-              unit_price:
-                typeof m.unit_price === "number" && Number.isFinite(m.unit_price)
-                  ? m.unit_price
-                  : 0,
-            })),
+            materials: materials.map(
+              (m: {
+                description?: string | null;
+                quantity?: number | null;
+                unit_price?: number | null;
+              }) => ({
+                description: String(m.description ?? ""),
+                quantity:
+                  typeof m.quantity === "number" && Number.isFinite(m.quantity)
+                    ? m.quantity
+                    : 1,
+                unit_price:
+                  typeof m.unit_price === "number" &&
+                  Number.isFinite(m.unit_price)
+                    ? m.unit_price
+                    : 0,
+              }),
+            ),
           }}
         />
       </div>
@@ -423,18 +444,93 @@ export default async function Page({
           <p className="mt-2 text-sm text-slate-500">No line items yet.</p>
         ) : (
           <ul className="mt-2 divide-y divide-slate-100 text-sm">
-            {materials.map((m: { id: string; description?: string | null; quantity?: number | null; total_price?: number | null }) => (
-              <li key={m.id} className="py-2 flex justify-between gap-4">
-                <span>{m.description ?? "Item"}</span>
-                <span className="tabular-nums text-slate-600">
-                  {m.quantity ?? 0} ×{" "}
-                  {typeof m.total_price === "number" &&
-                  Number.isFinite(m.total_price)
-                    ? formatCurrency(m.total_price, currencyCode)
-                    : "—"}
-                </span>
-              </li>
-            ))}
+            {materials.map(
+              (m: {
+                id: string;
+                description?: string | null;
+                quantity?: number | null;
+                total_price?: number | null;
+              }) => (
+                <li key={m.id} className="py-2 flex justify-between gap-4">
+                  <span>{m.description ?? "Item"}</span>
+                  <span className="tabular-nums text-slate-600">
+                    {m.quantity ?? 0} ×{" "}
+                    {typeof m.total_price === "number" &&
+                    Number.isFinite(m.total_price)
+                      ? formatCurrency(m.total_price, currencyCode)
+                      : "—"}
+                  </span>
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">
+          Linked receipts / materials costs
+        </h2>
+        {receipts.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-500">
+            No receipts have been scanned from this job sheet yet.
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-slate-100 text-sm">
+            {receipts.map(
+              (receipt: {
+                id: string;
+                receipt_url?: string | null;
+                supplier_name?: string | null;
+                invoice_date?: string | null;
+                amount_total?: number | null;
+                currency?: string | null;
+                uploaded_by_id?: string | null;
+                created_at?: string | null;
+              }) => {
+                const amount =
+                  typeof receipt.amount_total === "number" &&
+                  Number.isFinite(receipt.amount_total)
+                    ? formatCurrency(
+                        receipt.amount_total,
+                        receipt.currency ?? currencyCode,
+                      )
+                    : "Pending OCR";
+                const label = receipt.supplier_name?.trim() || "Receipt";
+                const detail = [
+                  formatDateOnly(receipt.invoice_date, locale),
+                  amount,
+                  receipt.created_at
+                    ? `scanned ${formatDateTime(receipt.created_at, locale)}`
+                    : null,
+                ]
+                  .filter((part) => part && part !== "—")
+                  .join(" · ");
+
+                return (
+                  <li key={receipt.id} className="py-2">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-medium text-slate-900">{label}</p>
+                        {detail ? (
+                          <p className="text-slate-500">{detail}</p>
+                        ) : null}
+                      </div>
+                      {receipt.receipt_url ? (
+                        <a
+                          href={receipt.receipt_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-slate-700 underline"
+                        >
+                          View receipt
+                        </a>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              },
+            )}
           </ul>
         )}
       </section>
@@ -442,7 +538,9 @@ export default async function Page({
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Completion</h2>
         {!completion ? (
-          <p className="mt-2 text-sm text-slate-500">No completion submitted.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            No completion submitted.
+          </p>
         ) : (
           <div className="mt-2 text-sm text-slate-700 space-y-2">
             <p className="whitespace-pre-wrap">
@@ -453,7 +551,10 @@ export default async function Page({
             </p>
             <p className="text-slate-500">
               Parts:{" "}
-              {String((completion as { parts_used?: string | null }).parts_used ?? "—")}
+              {String(
+                (completion as { parts_used?: string | null }).parts_used ??
+                  "—",
+              )}
             </p>
           </div>
         )}

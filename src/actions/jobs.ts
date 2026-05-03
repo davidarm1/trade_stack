@@ -635,12 +635,20 @@ export const getJob = cache(async function getJob(id: string) {
     .eq("tenant_id", ctx.tenantId)
     .order("uploaded_at", { ascending: false });
 
+  const { data: receipts } = await supabase
+    .from("receipts")
+    .select("*")
+    .eq("job_id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .order("created_at", { ascending: false });
+
   return {
     data: {
       job: { ...job, engineer, clients: clientRow },
       materials: materials ?? [],
       completion,
       images: images ?? [],
+      receipts: receipts ?? [],
     },
     error: null,
   };

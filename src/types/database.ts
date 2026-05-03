@@ -246,6 +246,8 @@ export type ReceiptLineItemsJson = unknown;
 export interface Receipt {
   id: string;
   tenant_id: string;
+  job_id: string | null;
+  client_id: string | null;
   uploaded_by_id: string | null;
   parent_receipt_id: string | null;
   receipt_url: string | null;

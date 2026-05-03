@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 import OpenAI from "openai";
 import { createHash } from "crypto";
-import {
-  getSessionTenantOrError,
-  rejectForeignTenantId,
-} from "@/lib/api-auth";
+import { getSessionTenantOrError, rejectForeignTenantId } from "@/lib/api-auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
@@ -35,6 +32,103 @@ function canManageOutgoings(role: string | null): boolean {
   return role === "owner" || role === "office";
 }
 
+type LinkedReceiptContext = {
+  jobId: string | null;
+  clientId: string | null;
+};
+
+async function validateLinkedJobContext(args: {
+  session: Extract<
+    Awaited<ReturnType<typeof getSessionTenantOrError>>,
+    { ok: true }
+  >;
+  jobId?: string | null;
+  clientId?: string | null;
+}): Promise<
+  | { ok: true; context: LinkedReceiptContext }
+  | { ok: false; response: NextResponse }
+> {
+  const jobId = String(args.jobId ?? "").trim() || null;
+  const clientId = String(args.clientId ?? "").trim() || null;
+
+  if (canManageOutgoings(args.session.role)) {
+    if (!jobId && !clientId) return { ok: true, context: { jobId, clientId } };
+  } else if (args.session.role !== "engineer") {
+    return { ok: false, response: insufficientPermissions() };
+  } else if (!jobId) {
+    return { ok: false, response: insufficientPermissions() };
+  }
+
+  if (jobId) {
+    const { data: job, error } = await args.session.supabase
+      .from("jobs")
+      .select(
+        "id, client_id, assigned_engineer_id, signed_at, invoice_paid_at, deleted_at",
+      )
+      .eq("id", jobId)
+      .eq("tenant_id", args.session.tenantId)
+      .maybeSingle();
+
+    if (error) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: error.message }, { status: 500 }),
+      };
+    }
+    if (!job || job.deleted_at || job.signed_at || job.invoice_paid_at) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Linked job is not available" },
+          { status: 403 },
+        ),
+      };
+    }
+    if (
+      args.session.role === "engineer" &&
+      job.assigned_engineer_id !== args.session.userId
+    ) {
+      return { ok: false, response: insufficientPermissions() };
+    }
+    if (clientId && job.client_id && job.client_id !== clientId) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "clientId does not match linked job" },
+          { status: 400 },
+        ),
+      };
+    }
+  }
+
+  if (clientId) {
+    const { data: client, error } = await args.session.supabase
+      .from("clients")
+      .select("id")
+      .eq("id", clientId)
+      .eq("tenant_id", args.session.tenantId)
+      .maybeSingle();
+
+    if (error) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: error.message }, { status: 500 }),
+      };
+    }
+    if (!client) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Linked client is not available" },
+          { status: 403 },
+        ),
+      };
+    }
+  }
+
+  return { ok: true, context: { jobId, clientId } };
+}
+
 type Parsed = {
   supplier_name: string | null;
   date: string | null;
@@ -48,7 +142,12 @@ type Parsed = {
 function extFromName(name: string): string {
   const i = name.lastIndexOf(".");
   if (i < 0) return "bin";
-  return name.slice(i + 1).toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+  return (
+    name
+      .slice(i + 1)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "") || "bin"
+  );
 }
 
 function mimeForExt(ext: string): string {
@@ -273,13 +372,17 @@ async function runReceiptOcrAfterUpload(args: {
     .eq("tenant_id", tenantId);
 
   if (updateErr) {
-    console.error("[scan-receipt] receipt OCR update failed:", updateErr.message);
+    console.error(
+      "[scan-receipt] receipt OCR update failed:",
+      updateErr.message,
+    );
   }
 }
 
 async function processReceiptUploadInBackground(args: {
   tenantId: string;
   userId: string;
+  linkedContext: LinkedReceiptContext;
   buf: Buffer;
   key: string;
   mime: string;
@@ -287,8 +390,17 @@ async function processReceiptUploadInBackground(args: {
   fileSha: string;
   displayFileName: string;
 }) {
-  const { tenantId, userId, buf, key, mime, ext, fileSha, displayFileName } =
-    args;
+  const {
+    tenantId,
+    userId,
+    linkedContext,
+    buf,
+    key,
+    mime,
+    ext,
+    fileSha,
+    displayFileName,
+  } = args;
 
   let supa: SupabaseClient;
   try {
@@ -307,7 +419,7 @@ async function processReceiptUploadInBackground(args: {
 
   const { error: fileErr } = await supa.from("tenant_files").insert({
     tenant_id: tenantId,
-    job_id: null,
+    job_id: linkedContext.jobId,
     file_type: "receipt",
     b2_key: key,
     file_name: displayFileName,
@@ -316,7 +428,10 @@ async function processReceiptUploadInBackground(args: {
   });
 
   if (fileErr) {
-    console.error("[scan-receipt] tenant_files insert failed:", fileErr.message);
+    console.error(
+      "[scan-receipt] tenant_files insert failed:",
+      fileErr.message,
+    );
     try {
       await deleteFromB2ByKey(key);
     } catch {
@@ -333,6 +448,8 @@ async function processReceiptUploadInBackground(args: {
     .from("receipts")
     .insert({
       tenant_id: tenantId,
+      job_id: linkedContext.jobId,
+      client_id: linkedContext.clientId,
       uploaded_by_id: userId,
       receipt_url: url,
       supplier_name: null,
@@ -353,7 +470,11 @@ async function processReceiptUploadInBackground(args: {
   if (recErr || !receiptRow) {
     console.error("[scan-receipt] receipts insert failed:", recErr?.message);
     try {
-      await supa.from("tenant_files").delete().eq("b2_key", key).eq("tenant_id", tenantId);
+      await supa
+        .from("tenant_files")
+        .delete()
+        .eq("b2_key", key)
+        .eq("tenant_id", tenantId);
     } catch {
       /* ignore */
     }
@@ -381,12 +502,13 @@ async function processReceiptUploadInBackground(args: {
 async function processUploadedObjectInBackground(args: {
   tenantId: string;
   userId: string;
+  linkedContext: LinkedReceiptContext;
   key: string;
   url: string;
   mime: string;
   fileName: string;
 }) {
-  const { tenantId, userId, key, url, mime, fileName } = args;
+  const { tenantId, userId, linkedContext, key, url, mime, fileName } = args;
   const ext = extFromName(fileName);
 
   let supa: SupabaseClient;
@@ -398,7 +520,7 @@ async function processUploadedObjectInBackground(args: {
 
   const { error: fileErr } = await supa.from("tenant_files").insert({
     tenant_id: tenantId,
-    job_id: null,
+    job_id: linkedContext.jobId,
     file_type: "receipt",
     b2_key: key,
     file_name: fileName,
@@ -406,7 +528,10 @@ async function processUploadedObjectInBackground(args: {
     public_url: url,
   });
   if (fileErr) {
-    console.error("[scan-receipt] tenant_files insert failed:", fileErr.message);
+    console.error(
+      "[scan-receipt] tenant_files insert failed:",
+      fileErr.message,
+    );
     return;
   }
 
@@ -415,6 +540,8 @@ async function processUploadedObjectInBackground(args: {
     .from("receipts")
     .insert({
       tenant_id: tenantId,
+      job_id: linkedContext.jobId,
+      client_id: linkedContext.clientId,
       uploaded_by_id: userId,
       receipt_url: url,
       supplier_name: null,
@@ -439,7 +566,8 @@ async function processUploadedObjectInBackground(args: {
   let buf: Buffer;
   try {
     const downloaded = await fetch(url, { cache: "no-store" });
-    if (!downloaded.ok) throw new Error(`download failed: ${downloaded.status}`);
+    if (!downloaded.ok)
+      throw new Error(`download failed: ${downloaded.status}`);
     buf = Buffer.from(await downloaded.arrayBuffer());
   } catch (e) {
     console.error("[scan-receipt] failed to download uploaded object:", e);
@@ -462,19 +590,19 @@ async function processUploadedObjectInBackground(args: {
 export async function POST(request: Request) {
   const session = await getSessionTenantOrError();
   if (!session.ok) return session.response;
-  if (!canManageOutgoings(session.role)) return insufficientPermissions();
 
   const contentType = request.headers.get("content-type") || "";
+  let linkedContext: LinkedReceiptContext = { jobId: null, clientId: null };
   if (contentType.includes("application/json")) {
-    let body:
-      | {
-          tenantId?: string;
-          key?: string;
-          publicUrl?: string;
-          fileName?: string;
-          fileType?: string;
-        }
-      | null = null;
+    let body: {
+      tenantId?: string;
+      key?: string;
+      publicUrl?: string;
+      fileName?: string;
+      fileType?: string;
+      jobId?: string | null;
+      clientId?: string | null;
+    } | null = null;
     try {
       body = (await request.json()) as {
         tenantId?: string;
@@ -482,27 +610,44 @@ export async function POST(request: Request) {
         publicUrl?: string;
         fileName?: string;
         fileType?: string;
+        jobId?: string | null;
+        clientId?: string | null;
       };
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     const mismatch = rejectForeignTenantId(body?.tenantId, session.tenantId);
     if (mismatch) return mismatch;
+    const linked = await validateLinkedJobContext({
+      session,
+      jobId: body?.jobId,
+      clientId: body?.clientId,
+    });
+    if (!linked.ok) return linked.response;
+    linkedContext = linked.context;
     const key = (body?.key || "").trim();
     const publicUrl = (body?.publicUrl || "").trim();
     const fileName = (body?.fileName || "receipt.pdf").trim();
-    const mime = (body?.fileType || "").trim() || mimeForExt(extFromName(fileName));
+    const mime =
+      (body?.fileType || "").trim() || mimeForExt(extFromName(fileName));
     if (!key || !publicUrl) {
-      return NextResponse.json({ error: "Missing upload metadata" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing upload metadata" },
+        { status: 400 },
+      );
     }
     if (!key.startsWith(`tradestack/${session.tenantId}/receipts/`)) {
-      return NextResponse.json({ error: "Invalid object key for tenant" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Invalid object key for tenant" },
+        { status: 403 },
+      );
     }
 
     after(() => {
       void processUploadedObjectInBackground({
         tenantId: session.tenantId,
         userId: session.userId,
+        linkedContext,
         key,
         url: publicUrl,
         mime,
@@ -534,6 +679,18 @@ export async function POST(request: Request) {
     session.tenantId,
   );
   if (mismatch) return mismatch;
+
+  const linked = await validateLinkedJobContext({
+    session,
+    jobId:
+      typeof form.get("jobId") === "string" ? String(form.get("jobId")) : null,
+    clientId:
+      typeof form.get("clientId") === "string"
+        ? String(form.get("clientId"))
+        : null,
+  });
+  if (!linked.ok) return linked.response;
+  linkedContext = linked.context;
 
   const file = form.get("file");
   if (!file || !(file instanceof File)) {
@@ -573,17 +730,13 @@ export async function POST(request: Request) {
       .eq("receipt_url", existingFile.public_url);
 
     if (countErr) {
-      return NextResponse.json(
-        { error: countErr.message },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: countErr.message }, { status: 500 });
     }
 
     if ((receiptCount ?? 0) > 0) {
       return NextResponse.json(
         {
-          error:
-            "Duplicate file detected: this invoice was already uploaded.",
+          error: "Duplicate file detected: this invoice was already uploaded.",
           duplicate: true,
           receiptUrl: existingFile.public_url,
         },
@@ -598,10 +751,7 @@ export async function POST(request: Request) {
       .eq("tenant_id", tenantId);
 
     if (orphanErr) {
-      return NextResponse.json(
-        { error: orphanErr.message },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: orphanErr.message }, { status: 500 });
     }
   }
 
@@ -611,6 +761,7 @@ export async function POST(request: Request) {
     void processReceiptUploadInBackground({
       tenantId,
       userId,
+      linkedContext,
       buf,
       key,
       mime,
