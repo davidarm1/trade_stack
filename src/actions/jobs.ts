@@ -263,6 +263,75 @@ export async function replaceJobInvoiceMaterials(
   return { data: true, error: null };
 }
 
+export async function updateJobCompletionDetails(
+  id: string,
+  data: {
+    work_carried_out?: string | null;
+    parts_used?: string | null;
+  },
+) {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const now = new Date().toISOString();
+  const payload = {
+    work_carried_out: String(data.work_carried_out ?? "").trim() || null,
+    parts_used: String(data.parts_used ?? "").trim() || null,
+  };
+
+  const { data: existing, error: existingErr } = await supabase
+    .from("job_completions")
+    .select("id")
+    .eq("job_id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+
+  if (existingErr) return { data: null, error: existingErr.message };
+
+  if (existing?.id) {
+    const { data: row, error } = await supabase
+      .from("job_completions")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("tenant_id", ctx.tenantId)
+      .select()
+      .single();
+    if (error) return { data: null, error: error.message };
+    revalidatePath("/jobs");
+    revalidatePath(`/jobs/${id}`);
+    return { data: row, error: null };
+  }
+
+  const { data: job, error: jobErr } = await supabase
+    .from("jobs")
+    .select("assigned_engineer_id")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (jobErr || !job) {
+    return { data: null, error: jobErr?.message ?? "Job not found" };
+  }
+
+  const { data: row, error } = await supabase
+    .from("job_completions")
+    .insert({
+      tenant_id: ctx.tenantId,
+      job_id: id,
+      engineer_id: job.assigned_engineer_id ?? null,
+      ...payload,
+      submitted_at: now,
+      date_completed: now.slice(0, 10),
+    })
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${id}`);
+  return { data: row, error: null };
+}
+
 export async function getJobInvoiceVersions(jobId: string): Promise<{
   data: JobInvoiceVersion[] | null;
   error: string | null;

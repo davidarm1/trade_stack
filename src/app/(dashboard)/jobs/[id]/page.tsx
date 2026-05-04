@@ -113,6 +113,9 @@ export default async function Page({
     approved_at?: string | null;
     invoice_sent_at?: string | null;
     invoice_paid_at?: string | null;
+    jobsheet_url?: string | null;
+    signature_url?: string | null;
+    signed_at?: string | null;
     engineer?: { name?: string | null; email?: string | null } | null;
     clients?: Record<string, unknown> | null;
   };
@@ -160,6 +163,13 @@ export default async function Page({
       ? formatCurrency(n, currencyCode)
       : "—";
   const locale = localeFromCurrency(currencyCode);
+  const completionSignatureUrl =
+    completion &&
+    typeof (completion as { client_signature_url?: unknown }).client_signature_url ===
+      "string"
+      ? String((completion as { client_signature_url?: string }).client_signature_url).trim()
+      : "";
+  const signatureUrl = String(j.signature_url ?? "").trim() || completionSignatureUrl;
 
   return (
     <div>
@@ -405,6 +415,7 @@ export default async function Page({
         <InvoicePreviewPanel
           jobId={j.id}
           currentInvoiceUrl={currentInvoiceVersion?.public_url ?? null}
+          currentJobSheetUrl={j.jobsheet_url ?? null}
           invoiceVersions={invoiceVersions}
           initial={{
             custom_invoice_number: j.custom_invoice_number ?? null,
@@ -433,6 +444,16 @@ export default async function Page({
                     ? m.unit_price
                     : 0,
               }),
+            ),
+          }}
+          jobSheetInitial={{
+            work_carried_out: String(
+              (completion as { work_carried_out?: string | null } | null)
+                ?.work_carried_out ?? "",
+            ),
+            parts_used: String(
+              (completion as { parts_used?: string | null } | null)?.parts_used ??
+                "",
             ),
           }}
         />
@@ -538,9 +559,11 @@ export default async function Page({
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Completion</h2>
         {!completion ? (
-          <p className="mt-2 text-sm text-slate-500">
-            No completion submitted.
-          </p>
+          signatureUrl ? null : (
+            <p className="mt-2 text-sm text-slate-500">
+              No completion submitted.
+            </p>
+          )
         ) : (
           <div className="mt-2 text-sm text-slate-700 space-y-2">
             <p className="whitespace-pre-wrap">
@@ -558,33 +581,71 @@ export default async function Page({
             </p>
           </div>
         )}
+        {signatureUrl ? (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="text-sm font-medium text-slate-900">
+              Client signature
+            </p>
+            <a href={signatureUrl} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={signatureUrl}
+                alt="Client signature"
+                className="mt-2 max-h-32 w-auto rounded border border-slate-200 bg-white p-2"
+              />
+            </a>
+            {j.signed_at ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Signed {formatDateTime(j.signed_at, locale)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Images</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Work photos</h2>
         {images.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No images uploaded.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            No engineer photos uploaded.
+          </p>
         ) : (
-          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {images.map(
-              (im: {
-                id: string;
-                image_url: string;
-                image_name?: string | null;
-              }) => (
-                <li key={im.id}>
-                  <a
-                    href={im.image_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-slate-900 underline"
-                  >
-                    {im.image_name ?? "Image"}
-                  </a>
-                </li>
-              ),
-            )}
-          </ul>
+          <>
+            <p className="mt-2 text-sm text-slate-500">
+              Engineer-uploaded photos from the job. Click any thumbnail to view
+              the full-size image.
+            </p>
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {images.map(
+                (im: {
+                  id: string;
+                  image_url: string;
+                  image_name?: string | null;
+                }) => (
+                  <li key={im.id}>
+                    <a
+                      href={im.image_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group block overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={im.image_url}
+                        alt={im.image_name ?? "Engineer job photo"}
+                        loading="lazy"
+                        decoding="async"
+                        className="aspect-video w-full object-cover transition group-hover:scale-[1.02]"
+                      />
+                      <span className="block truncate bg-white px-3 py-2 text-sm font-medium text-slate-700 group-hover:underline">
+                        {im.image_name ?? "View full-size photo"}
+                      </span>
+                    </a>
+                  </li>
+                ),
+              )}
+            </ul>
+          </>
         )}
       </section>
     </div>

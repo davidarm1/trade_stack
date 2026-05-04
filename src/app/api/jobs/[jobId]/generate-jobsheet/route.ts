@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import {
   getSessionTenantOrError,
   rejectForeignTenantId,
 } from "@/lib/api-auth";
 import { uploadToB2 } from "@/lib/b2";
 import { formatJobRefFormal } from "@/lib/job-number";
+import type { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+type PdfImageResult = {
+  image: PDFImage;
+  label: string;
+};
 
 function siteAddressLines(args: {
   site1: string | null | undefined;
@@ -23,26 +31,66 @@ function siteAddressLines(args: {
   return parts.join("\n") || "—";
 }
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ jobId: string }> },
-) {
-  const session = await getSessionTenantOrError();
-  if (!session.ok) return session.response;
+function text(value: unknown, fallback = "—"): string {
+  const s = String(value ?? "").trim();
+  return s || fallback;
+}
 
-  let bodyTenantId: string | undefined;
-  try {
-    const body = (await request.json()) as { tenantId?: string; jobId?: string };
-    bodyTenantId = body.tenantId;
-  } catch {
-    bodyTenantId = undefined;
+function wrapText(value: string, maxWidth: number, font: PDFFont, size: number): string[] {
+  const raw = value.trim();
+  if (!raw) return ["—"];
+  const lines: string[] = [];
+  for (const paragraph of raw.split(/\n+/)) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    let current = "";
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+        current = next;
+      } else {
+        if (current) lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
   }
-  const mismatch = rejectForeignTenantId(bodyTenantId, session.tenantId);
-  if (mismatch) return mismatch;
+  return lines.length ? lines : ["—"];
+}
 
-  const { jobId } = await context.params;
-  const { supabase, tenantId } = session;
+async function embedRemoteImage(
+  pdf: PDFDocument,
+  url: string | null | undefined,
+  label: string,
+): Promise<PdfImageResult | null> {
+  const src = String(url ?? "").trim();
+  if (!src) return null;
+  try {
+    const res = await fetch(src, { cache: "no-store" });
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+    const lowerSrc = src.toLowerCase();
+    const image =
+      contentType.includes("png") || lowerSrc.includes(".png")
+        ? await pdf.embedPng(bytes)
+        : contentType.includes("jpeg") ||
+            contentType.includes("jpg") ||
+            lowerSrc.includes(".jpg") ||
+            lowerSrc.includes(".jpeg")
+          ? await pdf.embedJpg(bytes)
+          : null;
+    return image ? { image, label } : null;
+  } catch {
+    return null;
+  }
+}
 
+async function buildJobSheetPdf(args: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  jobId: string;
+}): Promise<{ buffer: Buffer; fileName: string }> {
+  const { supabase, tenantId, jobId } = args;
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select("*")
@@ -52,14 +100,17 @@ export async function POST(
     .maybeSingle();
 
   if (jobErr || !job) {
-    return NextResponse.json(
-      { error: jobErr?.message ?? "Job not found" },
-      { status: 404 },
-    );
+    throw new Error(jobErr?.message ?? "Job not found");
   }
 
-  const [{ data: tenant }, { data: client }, { data: materials }, { data: engineer }] =
-    await Promise.all([
+  const [
+    { data: tenant },
+    { data: client },
+    { data: materials },
+    { data: engineer },
+    { data: completion },
+    { data: images },
+  ] = await Promise.all([
       supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle(),
       job.client_id
         ? supabase.from("clients").select("*").eq("id", job.client_id).maybeSingle()
@@ -77,9 +128,21 @@ export async function POST(
             .eq("id", job.assigned_engineer_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      supabase
+        .from("job_completions")
+        .select("*")
+        .eq("job_id", jobId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle(),
+      supabase
+        .from("job_images")
+        .select("image_url, image_name")
+        .eq("job_id", jobId)
+        .eq("tenant_id", tenantId)
+        .order("uploaded_at", { ascending: true }),
     ]);
 
-  const company = tenant?.name ?? "Company";
+  const company = text(tenant?.name, "Company");
   const clientName =
     client?.company_name ??
     client?.contact_name ??
@@ -93,12 +156,61 @@ export async function POST(
   });
 
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage();
+  let page = pdf.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
   const margin = 48;
+  const contentWidth = width - 2 * margin;
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   let y = height - margin;
+  const navy = rgb(26 / 255, 46 / 255, 74 / 255);
+  const border = rgb(220 / 255, 224 / 255, 230 / 255);
+  const textColor = rgb(30 / 255, 41 / 255, 59 / 255);
+
+  function addPage() {
+    page = pdf.addPage([595.28, 841.89]);
+    y = height - margin;
+  }
+
+  function ensureSpace(required: number) {
+    if (y - required < margin) addPage();
+  }
+
+  function drawHeading(label: string) {
+    ensureSpace(32);
+    page.drawText(label, { x: margin, y, size: 12, font: bold, color: navy });
+    y -= 16;
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: width - margin, y },
+      thickness: 0.5,
+      color: border,
+    });
+    y -= 14;
+  }
+
+  function drawBlock(label: string, value: string) {
+    drawHeading(label);
+    const lines = wrapText(value, contentWidth, font, 10);
+    for (const line of lines) {
+      ensureSpace(14);
+      page.drawText(line, { x: margin, y, size: 10, font, color: textColor });
+      y -= 13;
+    }
+    y -= 8;
+  }
+
+  function drawContainedImage(image: PDFImage, x: number, topY: number, maxW: number, maxH: number) {
+    const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+    const imageW = image.width * scale;
+    const imageH = image.height * scale;
+    page.drawImage(image, {
+      x: x + (maxW - imageW) / 2,
+      y: topY - imageH,
+      width: imageW,
+      height: imageH,
+    });
+  }
 
   const jobRef =
     formatJobRefFormal(job.job_number as number | null | undefined) ||
@@ -107,70 +219,32 @@ export async function POST(
     job.date_onsite ??
     (job.created_at ? String(job.created_at).slice(0, 10) : "—");
 
-  page.drawRectangle({
-    x: margin,
-    y: y - 64,
-    width: 120,
-    height: 48,
-    borderColor: rgb(0.75, 0.75, 0.75),
-    borderWidth: 1,
-  });
-  page.drawText("Logo", {
-    x: margin + 40,
-    y: y - 40,
-    size: 10,
-    font,
-    color: rgb(0.5, 0.5, 0.5),
-  });
+  page.drawText("JOB SHEET", { x: margin, y, size: 22, font: bold, color: navy });
+  page.drawText(company, { x: margin, y: y - 24, size: 12, font: bold, color: textColor });
+  page.drawText(jobRef, { x: width - margin - 130, y, size: 14, font: bold, color: navy });
+  y -= 58;
 
-  page.drawText(company, {
-    x: margin + 140,
-    y: y - 28,
-    size: 16,
-    font: bold,
-  });
-  y -= 80;
-
-  page.drawText("Job sheet", { x: margin, y, size: 14, font: bold });
-  y -= 22;
-  const lines = [
-    `Job: ${jobRef}`,
+  const metaLines = [
     `Date: ${jobDate}`,
     `Client: ${clientName}`,
-    `Site address:`,
-    ...site.split("\n").map((l) => `  ${l}`),
-    ``,
     `Engineer: ${engineer?.name ?? "—"}`,
-    ``,
-    `Description`,
+    "Site address:",
+    ...site.split("\n").map((line) => `  ${line}`),
   ];
-  for (const line of lines) {
-    page.drawText(line, { x: margin, y, size: 10, font, maxWidth: width - 2 * margin });
-    y -= 12;
+  for (const line of metaLines) {
+    page.drawText(line, { x: margin, y, size: 10, font, color: textColor });
+    y -= 13;
   }
+  y -= 12;
 
-  const rawDesc = job.description ?? "—";
-  const descLines = rawDesc
-    .split("\n")
-    .flatMap((line: string) =>
-      line.length <= 95 ? [line] : line.match(/.{1,95}/g) ?? [line],
-    );
-  for (const line of descLines) {
-    if (y < margin + 200) break;
-    page.drawText(line, {
-      x: margin,
-      y,
-      size: 9,
-      font,
-      maxWidth: width - 2 * margin,
-    });
-    y -= 11;
-  }
-  y -= 14;
+  drawBlock("Job description", text(job.description));
+  drawBlock(
+    "Work carried out",
+    text(completion?.work_carried_out, "No completion notes recorded."),
+  );
+  drawBlock("Parts used", text(completion?.parts_used, "None recorded."));
 
-  page.drawText("Materials & labour", { x: margin, y, size: 12, font: bold });
-  y -= 16;
-
+  drawHeading("Materials & labour");
   const tableHeader = ["Description", "Qty", "Unit", "Line"];
   const colX = [margin, margin + 220, margin + 270, margin + 330];
   page.drawText(tableHeader[0], { x: colX[0], y, size: 9, font: bold });
@@ -181,23 +255,10 @@ export async function POST(
 
   const matRows = (materials ?? []).length
     ? (materials ?? [])
-    : [
-        {
-          description: "",
-          quantity: null,
-          unit_price: null,
-          total_price: null,
-        },
-        {
-          description: "",
-          quantity: null,
-          unit_price: null,
-          total_price: null,
-        },
-      ];
+    : [{ description: "No materials recorded", quantity: null, unit_price: null, total_price: null }];
 
   for (const row of matRows) {
-    if (y < margin + 120) break;
+    ensureSpace(16);
     const d = String(row.description ?? "").slice(0, 60) || "—";
     const qty = row.quantity != null ? String(row.quantity) : "";
     const unit = row.unit_price != null ? String(row.unit_price) : "";
@@ -221,6 +282,12 @@ export async function POST(
   );
   y -= 40;
 
+  const signature = await embedRemoteImage(
+    pdf,
+    job.signature_url ?? completion?.client_signature_url,
+    "Client signature",
+  );
+  ensureSpace(120);
   page.drawText("Client signature", { x: margin, y, size: 11, font: bold });
   y -= 8;
   page.drawRectangle({
@@ -231,7 +298,53 @@ export async function POST(
     borderColor: rgb(0.2, 0.2, 0.2),
     borderWidth: 1,
   });
+  if (signature) {
+    drawContainedImage(signature.image, margin + 8, y - 8, contentWidth - 16, 60);
+  }
   y -= 100;
+
+  const photoImages = (
+    await Promise.all(
+      (images ?? []).map((image) =>
+        embedRemoteImage(
+          pdf,
+          image.image_url,
+          text(image.image_name, "Engineer job photo"),
+        ),
+      ),
+    )
+  ).filter(Boolean) as PdfImageResult[];
+
+  if (photoImages.length > 0) {
+    drawHeading("Engineer work photos");
+    const gap = 16;
+    const photoW = (contentWidth - gap) / 2;
+    const photoH = 150;
+    for (let i = 0; i < photoImages.length; i += 2) {
+      ensureSpace(photoH + 36);
+      const row = photoImages.slice(i, i + 2);
+      row.forEach((photo, idx) => {
+        const x = margin + idx * (photoW + gap);
+        page.drawRectangle({
+          x,
+          y: y - photoH,
+          width: photoW,
+          height: photoH,
+          borderColor: border,
+          borderWidth: 1,
+        });
+        drawContainedImage(photo.image, x + 6, y - 6, photoW - 12, photoH - 32);
+        page.drawText(photo.label.slice(0, 42), {
+          x: x + 6,
+          y: y - photoH + 10,
+          size: 8,
+          font,
+          color: textColor,
+        });
+      });
+      y -= photoH + 18;
+    }
+  }
 
   const genDate = new Date().toISOString().slice(0, 10);
   page.drawText(`${jobRef} · Generated ${genDate}`, {
@@ -243,7 +356,71 @@ export async function POST(
   });
 
   const bytes = await pdf.save();
-  const buffer = Buffer.from(bytes);
+  return {
+    buffer: Buffer.from(bytes),
+    fileName: `${jobRef.replace(/[^\w-]+/g, "_")}_jobsheet.pdf`,
+  };
+}
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ jobId: string }> },
+) {
+  try {
+    const session = await getSessionTenantOrError();
+    if (!session.ok) return session.response;
+
+    const { jobId } = await context.params;
+    const { buffer, fileName } = await buildJobSheetPdf({
+      supabase: session.supabase,
+      tenantId: session.tenantId,
+      jobId,
+    });
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${fileName}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not generate job sheet" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ jobId: string }> },
+) {
+  const session = await getSessionTenantOrError();
+  if (!session.ok) return session.response;
+
+  let bodyTenantId: string | undefined;
+  try {
+    const body = (await request.json()) as { tenantId?: string; jobId?: string };
+    bodyTenantId = body.tenantId;
+  } catch {
+    bodyTenantId = undefined;
+  }
+  const mismatch = rejectForeignTenantId(bodyTenantId, session.tenantId);
+  if (mismatch) return mismatch;
+
+  const { jobId } = await context.params;
+  const { supabase, tenantId } = session;
+  let generated: { buffer: Buffer; fileName: string };
+  try {
+    generated = await buildJobSheetPdf({ supabase, tenantId, jobId });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not generate job sheet" },
+      { status: 500 },
+    );
+  }
+
+  const { buffer, fileName } = generated;
   const key = `tradestack/${tenantId}/jobsheets/${jobId}.pdf`;
   const url = await uploadToB2(buffer, key, "application/pdf");
 
@@ -252,7 +429,7 @@ export async function POST(
     job_id: jobId,
     file_type: "jobsheet",
     b2_key: key,
-    file_name: `${jobRef.replace(/[^\w-]+/g, "_")}.pdf`,
+    file_name: fileName,
     file_size_bytes: buffer.length,
     public_url: url,
   });

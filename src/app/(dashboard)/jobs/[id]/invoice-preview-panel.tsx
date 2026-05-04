@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   replaceJobInvoiceMaterials,
+  updateJobCompletionDetails,
   updateJobInvoiceDetails,
 } from "@/actions/jobs";
 
@@ -15,6 +16,7 @@ type MaterialRow = {
 type Props = {
   jobId: string;
   currentInvoiceUrl: string | null;
+  currentJobSheetUrl: string | null;
   invoiceVersions: Array<{
     id: string;
     version_no: number;
@@ -32,6 +34,10 @@ type Props = {
     labour_charge: number | null;
     materials: MaterialRow[];
   };
+  jobSheetInitial: {
+    work_carried_out: string;
+    parts_used: string;
+  };
 };
 
 const inputCls =
@@ -40,13 +46,17 @@ const inputCls =
 export function InvoicePreviewPanel({
   jobId,
   currentInvoiceUrl,
+  currentJobSheetUrl,
   invoiceVersions,
   initial,
+  jobSheetInitial,
 }: Props) {
+  const [activeTab, setActiveTab] = useState<"invoice" | "jobsheet">("invoice");
   const [showEditor, setShowEditor] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [savedJobSheetUrl, setSavedJobSheetUrl] = useState(currentJobSheetUrl);
   const [fields, setFields] = useState({
     custom_invoice_number: initial.custom_invoice_number ?? "",
     custom_po_number: initial.custom_po_number ?? "",
@@ -61,9 +71,17 @@ export function InvoicePreviewPanel({
       ? initial.materials
       : [{ description: "", quantity: 1, unit_price: 0 }],
   );
+  const [jobSheetFields, setJobSheetFields] = useState({
+    work_carried_out: jobSheetInitial.work_carried_out,
+    parts_used: jobSheetInitial.parts_used,
+  });
 
   const previewUrl = useMemo(
     () => `/jobs/${jobId}/invoice?v=${version}`,
+    [jobId, version],
+  );
+  const jobSheetPreviewUrl = useMemo(
+    () => `/api/jobs/${jobId}/generate-jobsheet?v=${version}`,
     [jobId, version],
   );
 
@@ -113,9 +131,76 @@ export function InvoicePreviewPanel({
     setMsg("Materials saved.");
   }
 
+  async function saveJobSheet() {
+    if (busy) return;
+    setBusy("jobsheet");
+    setMsg(null);
+    const { error } = await updateJobCompletionDetails(jobId, {
+      work_carried_out: jobSheetFields.work_carried_out,
+      parts_used: jobSheetFields.parts_used,
+    });
+    if (error) {
+      setBusy(null);
+      setMsg(error);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/generate-jobsheet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = (await res.json()) as { success?: boolean; url?: string; error?: string };
+      if (!res.ok || !data.success || !data.url) {
+        throw new Error(data.error ?? "Could not create job sheet PDF");
+      }
+      setSavedJobSheetUrl(data.url);
+      setVersion((v) => v + 1);
+      setMsg("Job sheet saved and PDF created.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Could not create job sheet PDF");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("invoice");
+            setMsg(null);
+          }}
+          className={`border-b-2 px-4 py-2 text-sm font-medium ${
+            activeTab === "invoice"
+              ? "border-slate-900 text-slate-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Invoice
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("jobsheet");
+            setMsg(null);
+          }}
+          className={`border-b-2 px-4 py-2 text-sm font-medium ${
+            activeTab === "jobsheet"
+              ? "border-slate-900 text-slate-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Job Sheet
+        </button>
+      </div>
+
+      {activeTab === "invoice" ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
@@ -341,6 +426,107 @@ export function InvoicePreviewPanel({
           </ul>
         )}
       </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+              onClick={() => setShowEditor((s) => !s)}
+            >
+              {showEditor ? "Hide job sheet details" : "Edit job sheet details"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+              onClick={() => {
+                const target = savedJobSheetUrl || jobSheetPreviewUrl;
+                window.open(target, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Open job sheet in new tab
+            </button>
+            <button
+              type="button"
+              disabled={busy === "jobsheet"}
+              className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
+              onClick={() => void saveJobSheet()}
+            >
+              {busy === "jobsheet" ? "Saving..." : "Save and create job sheet PDF"}
+            </button>
+          </div>
+
+          {showEditor ? (
+            <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <label className="block text-xs text-slate-600">
+                Work carried out
+                <textarea
+                  className={`${inputCls} mt-1 min-h-28`}
+                  value={jobSheetFields.work_carried_out}
+                  onChange={(e) =>
+                    setJobSheetFields((f) => ({
+                      ...f,
+                      work_carried_out: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="block text-xs text-slate-600">
+                Parts used
+                <textarea
+                  className={`${inputCls} mt-1 min-h-20`}
+                  value={jobSheetFields.parts_used}
+                  onChange={(e) =>
+                    setJobSheetFields((f) => ({ ...f, parts_used: e.target.value }))
+                  }
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Saving updates the office copy of the engineer notes and creates
+                a stored PDF job sheet with the client signature and work photos.
+              </p>
+            </div>
+          ) : null}
+
+          {msg ? (
+            <p className="mt-2 text-xs text-slate-600">
+              {busy ? "Saving..." : msg}
+            </p>
+          ) : null}
+
+          <div className="mt-4 h-[600px] w-full overflow-hidden rounded-md border border-slate-200 bg-slate-100 p-3 shadow-sm">
+            <div className="h-full w-full origin-top-left scale-[0.75]">
+              <iframe
+                title="Job sheet preview"
+                src={jobSheetPreviewUrl}
+                className="h-[800px] w-[133.3333%] rounded border border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.08)]"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Stored job sheet
+            </h3>
+            {savedJobSheetUrl ? (
+              <a
+                href={savedJobSheetUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex rounded border border-slate-300 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                View stored PDF
+              </a>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">
+                No stored job sheet PDF yet. Click &quot;Save and create job
+                sheet PDF&quot; to create one.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
