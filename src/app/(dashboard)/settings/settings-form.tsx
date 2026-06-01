@@ -173,6 +173,7 @@ export function SettingsForm({
       default_payment_terms_days: form.get("default_payment_terms_days")
         ? Number(form.get("default_payment_terms_days"))
         : null,
+      invoice_footer_text: String(form.get("invoice_footer_text") ?? "").trim() || null,
     });
 
     setPending(false);
@@ -300,6 +301,21 @@ export function SettingsForm({
           />
         </div>
       </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Invoice footer text
+        </label>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Printed at the bottom of every invoice PDF. Defaults to &ldquo;Thank you for your business.&rdquo; if left blank.
+        </p>
+        <textarea
+          name="invoice_footer_text"
+          rows={2}
+          defaultValue={tenant?.invoice_footer_text ?? ""}
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-slate-700">Logo</label>
         <p className="mt-1 text-xs text-slate-500">

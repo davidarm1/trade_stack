@@ -63,6 +63,7 @@ export function AddOutgoingModal() {
               Upload a PDF or image — we scan it with AI and save it securely.
             </p>
             <UploadReceiptForm
+              initialPaymentStatus="paid"
               onUploadSuccess={() => {
                 setOpen(false);
                 showFlash("Record added");

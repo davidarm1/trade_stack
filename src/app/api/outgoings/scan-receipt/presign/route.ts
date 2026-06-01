@@ -39,8 +39,8 @@ async function validateLinkedJobContext(args: {
     if (!jobId && !clientId) return { ok: true };
   } else if (args.session.role !== "engineer") {
     return { ok: false, response: insufficientPermissions() };
-  } else if (!jobId) {
-    return { ok: false, response: insufficientPermissions() };
+  } else if (!jobId && !clientId) {
+    return { ok: true };
   }
 
   if (jobId) {

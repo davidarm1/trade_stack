@@ -5,6 +5,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
   owner: [
     "/account/security",
     "/dashboard",
+    "/collections",
     "/jobs",
     "/quotes",
     "/clients",
@@ -17,6 +18,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
   office: [
     "/account/security",
     "/dashboard",
+    "/collections",
     "/jobs",
     "/quotes",
     "/clients",
@@ -40,6 +42,7 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
 
 export const NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/collections", label: "This Week" },
   { href: "/jobs", label: "Jobs" },
   { href: "/quotes", label: "Quotes" },
   { href: "/clients", label: "Clients" },

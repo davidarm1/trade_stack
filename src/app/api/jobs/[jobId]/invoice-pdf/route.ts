@@ -493,7 +493,9 @@ export async function GET(
     }`,
     { x: margin, y: footerY + 4, size: 8.5, font, color: TEXT },
   );
-  page.drawText("Thank you for your business", {
+  const invoiceFooter =
+    String(tenant?.invoice_footer_text ?? "").trim() || "Thank you for your business.";
+  page.drawText(invoiceFooter, {
     x: margin,
     y: footerY - 8,
     size: 9,

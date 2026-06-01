@@ -13,12 +13,37 @@ async function sha256Hex(file: File): Promise<string> {
     .join("");
 }
 
+type PaymentStatusSelection =
+  | "paid"
+  | "due_7"
+  | "due_14"
+  | "due_28"
+  | "due_30";
+
 type UploadReceiptFormProps = {
   /** Called after a successful upload and list refresh (e.g. close modal + flash toast). */
   onUploadSuccess?: () => void;
+  initialPaymentStatus?: PaymentStatusSelection;
 };
 
-export function UploadReceiptForm({ onUploadSuccess }: UploadReceiptFormProps) {
+const PAYMENT_STATUS_OPTIONS: Array<{
+  value: PaymentStatusSelection;
+  label: string;
+}> = [
+  { value: "paid", label: "Paid" },
+  { value: "due_7", label: "Due in 7 days" },
+  { value: "due_14", label: "Due in 14 days" },
+  { value: "due_28", label: "Due in 28 days" },
+  { value: "due_30", label: "Due in 30 days" },
+];
+
+export function UploadReceiptForm({
+  onUploadSuccess,
+  initialPaymentStatus = "paid",
+}: UploadReceiptFormProps) {
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusSelection>(
+    initialPaymentStatus,
+  );
   const router = useRouter();
   const requestIdRef = useRef(0);
   const [file, setFile] = useState<File | null>(null);
@@ -53,6 +78,7 @@ export function UploadReceiptForm({ onUploadSuccess }: UploadReceiptFormProps) {
   ) {
     const form = new FormData();
     form.append("file", file);
+    form.append("payment_status", paymentStatus);
     const res = await fetch("/api/outgoings/scan-receipt", {
       method: "POST",
       body: form,
@@ -92,7 +118,7 @@ export function UploadReceiptForm({ onUploadSuccess }: UploadReceiptFormProps) {
     const res = await fetch("/api/outgoings/scan-receipt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(meta),
+      body: JSON.stringify({ ...meta, payment_status: paymentStatus }),
     });
     let data: {
       error?: string;
@@ -208,6 +234,29 @@ export function UploadReceiptForm({ onUploadSuccess }: UploadReceiptFormProps) {
       <p className="mt-1 text-xs text-slate-500">
         Supported: PDF, JPG, PNG, WEBP, GIF.
       </p>
+      <div className="mt-4 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Payment Status
+          </label>
+          <select
+            value={paymentStatus}
+            onChange={(e) => setPaymentStatus(e.target.value as PaymentStatusSelection)}
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+          >
+            {PAYMENT_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {paymentStatus !== "paid" ? (
+          <p className="text-xs text-slate-500">
+            Due date will be calculated from invoice date after scanning
+          </p>
+        ) : null}
+      </div>
       {error ? (
         <p className="mt-3 text-sm text-red-600" role="alert">
           {error}

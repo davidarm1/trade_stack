@@ -63,3 +63,4 @@ Trade Stack is a multi-tenant SaaS starter for field-service businesses: jobs, q
 
 - `@supabase/auth-helpers-nextjs` is installed as requested; session handling uses `@supabase/ssr` (`createBrowserClient` / `createServerClient`) per current Supabase guidance.
 - Several UI flows include `TODO` comments where you will wire Storage uploads, PDFs, email, or Supabase invites.
+

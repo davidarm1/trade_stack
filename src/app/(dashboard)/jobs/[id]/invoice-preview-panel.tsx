@@ -37,6 +37,7 @@ type Props = {
   jobSheetInitial: {
     work_carried_out: string;
     parts_used: string;
+    recommendations: string;
   };
 };
 
@@ -74,6 +75,7 @@ export function InvoicePreviewPanel({
   const [jobSheetFields, setJobSheetFields] = useState({
     work_carried_out: jobSheetInitial.work_carried_out,
     parts_used: jobSheetInitial.parts_used,
+    recommendations: jobSheetInitial.recommendations,
   });
 
   const previewUrl = useMemo(
@@ -81,7 +83,7 @@ export function InvoicePreviewPanel({
     [jobId, version],
   );
   const jobSheetPreviewUrl = useMemo(
-    () => `/api/jobs/${jobId}/generate-jobsheet?v=${version}`,
+    () => `/jobs/${jobId}/job-sheet?embed=1&v=${version}`,
     [jobId, version],
   );
 
@@ -138,6 +140,7 @@ export function InvoicePreviewPanel({
     const { error } = await updateJobCompletionDetails(jobId, {
       work_carried_out: jobSheetFields.work_carried_out,
       parts_used: jobSheetFields.parts_used,
+      recommendations: jobSheetFields.recommendations,
     });
     if (error) {
       setBusy(null);
@@ -479,6 +482,16 @@ export function InvoicePreviewPanel({
                   value={jobSheetFields.parts_used}
                   onChange={(e) =>
                     setJobSheetFields((f) => ({ ...f, parts_used: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="block text-xs text-slate-600">
+                Recommendations
+                <textarea
+                  className={`${inputCls} mt-1 min-h-20`}
+                  value={jobSheetFields.recommendations}
+                  onChange={(e) =>
+                    setJobSheetFields((f) => ({ ...f, recommendations: e.target.value }))
                   }
                 />
               </label>

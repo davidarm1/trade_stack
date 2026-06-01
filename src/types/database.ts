@@ -22,6 +22,7 @@ export interface Tenant {
   default_vat_rate: number | null;
   default_payment_terms_days: number | null;
   currency: string | null;
+  invoice_footer_text: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -196,6 +197,7 @@ export interface JobCompletion {
   engineer_id: string | null;
   work_carried_out: string | null;
   parts_used: string | null;
+  recommendations: string | null;
   date_completed: string | null;
   start_time: string | null;
   finish_time: string | null;

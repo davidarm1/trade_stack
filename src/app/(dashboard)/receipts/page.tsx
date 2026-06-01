@@ -3,7 +3,6 @@ import { getSettings } from "@/actions/settings";
 import { AddOutgoingModal } from "./add-outgoing-modal";
 import { OutgoingsDueSoonAlert } from "./outgoings-due-soon-alert";
 import { ReceiptsEditableTable } from "./receipts-editable-table";
-import { OutgoingsSummaryCards } from "./outgoings-summary-cards";
 
 export default async function ReceiptsPage() {
   const [{ data: rows, error }, settingsRes] = await Promise.all([
@@ -34,7 +33,6 @@ export default async function ReceiptsPage() {
         <AddOutgoingModal />
       </div>
 
-      <OutgoingsSummaryCards rows={rows ?? []} currencyCode={currencyCode} />
       <OutgoingsDueSoonAlert rows={rows ?? []} currencyCode={currencyCode} />
       <ReceiptsEditableTable rows={rows ?? []} currencyCode={currencyCode} />
     </div>

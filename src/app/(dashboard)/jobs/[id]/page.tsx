@@ -455,6 +455,10 @@ export default async function Page({
               (completion as { parts_used?: string | null } | null)?.parts_used ??
                 "",
             ),
+            recommendations: String(
+              (completion as { recommendations?: string | null } | null)
+                ?.recommendations ?? "",
+            ),
           }}
         />
       </div>
@@ -565,20 +569,50 @@ export default async function Page({
             </p>
           )
         ) : (
-          <div className="mt-2 text-sm text-slate-700 space-y-2">
-            <p className="whitespace-pre-wrap">
-              {String(
-                (completion as { work_carried_out?: string | null })
-                  .work_carried_out ?? "",
-              )}
-            </p>
-            <p className="text-slate-500">
-              Parts:{" "}
-              {String(
-                (completion as { parts_used?: string | null }).parts_used ??
-                  "—",
-              )}
-            </p>
+          <div className="mt-2 text-sm text-slate-700 space-y-3">
+            {(() => {
+              const c = completion as {
+                work_carried_out?: string | null;
+                parts_used?: string | null;
+                recommendations?: string | null;
+                start_time?: string | null;
+                finish_time?: string | null;
+                client_print_name?: string | null;
+              };
+              return (
+                <>
+                  {(c.start_time || c.finish_time) ? (
+                    <p className="text-slate-500">
+                      Time on site:{" "}
+                      {[c.start_time, c.finish_time].filter(Boolean).join(" – ")}
+                    </p>
+                  ) : null}
+                  {c.work_carried_out ? (
+                    <div>
+                      <p className="font-medium text-slate-900">Work carried out</p>
+                      <p className="mt-1 whitespace-pre-wrap">{c.work_carried_out}</p>
+                    </div>
+                  ) : null}
+                  {c.parts_used ? (
+                    <div>
+                      <p className="font-medium text-slate-900">Parts used</p>
+                      <p className="mt-1 whitespace-pre-wrap">{c.parts_used}</p>
+                    </div>
+                  ) : null}
+                  {c.recommendations ? (
+                    <div>
+                      <p className="font-medium text-slate-900">Recommendations</p>
+                      <p className="mt-1 whitespace-pre-wrap">{c.recommendations}</p>
+                    </div>
+                  ) : null}
+                  {c.client_print_name ? (
+                    <p className="text-slate-500">
+                      Signed by: {c.client_print_name}
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()}
           </div>
         )}
         {signatureUrl ? (

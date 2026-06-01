@@ -19,7 +19,15 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const SYSTEM =
-  "You are a receipt parser. Extract data from this receipt or invoice image and return ONLY a JSON object with these fields: supplier_name, date (YYYY-MM-DD), total_amount (number), vat_amount (number or null), description, currency (default GBP), items (array of line objects or null). Each line object may include: description, quantity, unit_price, total (line gross), net, tax. If the receipt shows multiple product/service lines, fill items; otherwise items can be null. Return null for any field you cannot determine. Return JSON only, no markdown, no explanation.";
+  "You are a receipt parser. Extract data from this receipt or invoice image and return ONLY a JSON object with these fields: supplier_name, date (YYYY-MM-DD), total_amount (number), vat_amount (number or null), payment_status (paid or unpaid), description, currency (default GBP), items (array of line objects or null). Each line object may include: description, quantity, unit_price, total (line gross), net, tax. If the receipt shows multiple product/service lines, fill items; otherwise items can be null. Return null for any field you cannot determine. Return JSON only, no markdown, no explanation.";
+
+function coercePaymentStatus(raw: unknown): "paid" | "unpaid" | null {
+  if (typeof raw !== "string") return null;
+  const status = raw.trim().toLowerCase();
+  if (status === "paid") return "paid";
+  if (status === "unpaid") return "unpaid";
+  return null;
+}
 
 function insufficientPermissions() {
   return NextResponse.json(
@@ -30,6 +38,74 @@ function insufficientPermissions() {
 
 function canManageOutgoings(role: string | null): boolean {
   return role === "owner" || role === "office";
+}
+
+type PaymentStatusSelection =
+  | "paid"
+  | "due_7"
+  | "due_14"
+  | "due_28"
+  | "due_30";
+
+function parseRequestedPaymentStatus(raw: unknown): PaymentStatusSelection {
+  if (typeof raw !== "string") return "paid";
+  const status = raw.trim().toLowerCase();
+  if (
+    status === "paid" ||
+    status === "due_7" ||
+    status === "due_14" ||
+    status === "due_28" ||
+    status === "due_30"
+  ) {
+    return status;
+  }
+  return "paid";
+}
+
+function paymentStatusForSelection(
+  selection: PaymentStatusSelection,
+): "paid" | "unpaid" {
+  return selection === "paid" ? "paid" : "unpaid";
+}
+
+function dueDaysForSelection(selection: PaymentStatusSelection): number | null {
+  if (selection === "due_7") return 7;
+  if (selection === "due_14") return 14;
+  if (selection === "due_28") return 28;
+  if (selection === "due_30") return 30;
+  return null;
+}
+
+function isoDateOrToday(raw: string | null | undefined): string {
+  const d = raw ? new Date(raw) : new Date();
+  if (Number.isNaN(d.getTime())) {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      .toISOString()
+      .slice(0, 10);
+  }
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function addDaysUtc(baseIso: string, days: number): string {
+  const d = new Date(`${baseIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function resolveReceiptPaymentFields(args: {
+  selection: PaymentStatusSelection;
+  invoiceDate?: string | null;
+}): { payment_status: "paid" | "unpaid"; due_date: string | null } {
+  const payment_status = paymentStatusForSelection(args.selection);
+  const dueDays = dueDaysForSelection(args.selection);
+  if (payment_status === "paid" || dueDays == null) {
+    return { payment_status, due_date: null };
+  }
+  const base = isoDateOrToday(args.invoiceDate);
+  return { payment_status, due_date: addDaysUtc(base, dueDays) };
 }
 
 type LinkedReceiptContext = {
@@ -55,8 +131,8 @@ async function validateLinkedJobContext(args: {
     if (!jobId && !clientId) return { ok: true, context: { jobId, clientId } };
   } else if (args.session.role !== "engineer") {
     return { ok: false, response: insufficientPermissions() };
-  } else if (!jobId) {
-    return { ok: false, response: insufficientPermissions() };
+  } else if (!jobId && !clientId) {
+    return { ok: true, context: { jobId, clientId } };
   }
 
   if (jobId) {
@@ -134,6 +210,7 @@ type Parsed = {
   date: string | null;
   total_amount: number | null;
   vat_amount: number | null;
+  payment_status: "paid" | "unpaid" | null;
   description: string | null;
   currency: string | null;
   items: unknown[] | null;
@@ -168,6 +245,7 @@ async function runReceiptOcrAfterUpload(args: {
   fileName: string;
   isPdf: boolean;
   url: string;
+  requestedPaymentStatus: PaymentStatusSelection;
 }) {
   const {
     supabase,
@@ -179,6 +257,7 @@ async function runReceiptOcrAfterUpload(args: {
     fileName,
     isPdf,
     url,
+    requestedPaymentStatus,
   } = args;
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -197,9 +276,19 @@ async function runReceiptOcrAfterUpload(args: {
     mime,
     isPdf,
     url,
+    requestedPaymentStatus,
   });
 
-  let parsed: Parsed | null = null;
+  let parsed: Parsed = {
+    supplier_name: null,
+    date: null,
+    total_amount: null,
+    vat_amount: null,
+    payment_status: null,
+    description: null,
+    currency: "GBP",
+    items: null,
+  };
   let scanConfidence: "high" | "low" | "failed" = "failed";
   let promptTokens: number | null = null;
   let completionTokens: number | null = null;
@@ -289,6 +378,7 @@ async function runReceiptOcrAfterUpload(args: {
         description:
           typeof obj.description === "string" ? obj.description : null,
         currency: typeof obj.currency === "string" ? obj.currency : "GBP",
+        payment_status: coercePaymentStatus(obj.payment_status),
         items: Array.isArray(rawItems) ? rawItems : null,
       };
       const hasAny =
@@ -304,6 +394,7 @@ async function runReceiptOcrAfterUpload(args: {
         date: null,
         total_amount: null,
         vat_amount: null,
+        payment_status: null,
         description: null,
         currency: "GBP",
         items: null,
@@ -316,6 +407,7 @@ async function runReceiptOcrAfterUpload(args: {
       date: null,
       total_amount: null,
       vat_amount: null,
+      payment_status: null,
       description: null,
       currency: "GBP",
       items: null,
@@ -380,6 +472,10 @@ async function runReceiptOcrAfterUpload(args: {
       line_items: lineItemsNormalized,
       notes: notesFromOcr,
       currency: parsed?.currency ?? "GBP",
+      ...resolveReceiptPaymentFields({
+        selection: requestedPaymentStatus,
+        invoiceDate: parsed?.date ?? null,
+      }),
       processed_by_ai: true,
       ai_processed_at: now,
       ai_confidence: aiConfidence,
@@ -413,6 +509,7 @@ async function processReceiptUploadInBackground(args: {
   ext: string;
   fileSha: string;
   displayFileName: string;
+  requestedPaymentStatus: PaymentStatusSelection;
 }) {
   const {
     tenantId,
@@ -424,6 +521,7 @@ async function processReceiptUploadInBackground(args: {
     ext,
     fileSha,
     displayFileName,
+    requestedPaymentStatus,
   } = args;
 
   let supa: SupabaseClient;
@@ -483,6 +581,8 @@ async function processReceiptUploadInBackground(args: {
       line_items: [],
       notes: null,
       currency: "GBP",
+      payment_status: paymentStatusForSelection(requestedPaymentStatus),
+      due_date: null,
       processed_by_ai: false,
       ai_processed_at: null,
       ai_confidence: null,
@@ -520,6 +620,7 @@ async function processReceiptUploadInBackground(args: {
     fileName,
     isPdf,
     url,
+    requestedPaymentStatus,
   });
 }
 
@@ -531,8 +632,9 @@ async function processUploadedObjectInBackground(args: {
   url: string;
   mime: string;
   fileName: string;
+  requestedPaymentStatus: PaymentStatusSelection;
 }) {
-  const { tenantId, userId, linkedContext, key, url, mime, fileName } = args;
+  const { tenantId, userId, linkedContext, key, url, mime, fileName, requestedPaymentStatus } = args;
   const ext = extFromName(fileName);
 
   console.log("[scan-receipt] background finalize starting", {
@@ -591,6 +693,8 @@ async function processUploadedObjectInBackground(args: {
       line_items: [],
       notes: null,
       currency: "GBP",
+      payment_status: paymentStatusForSelection(requestedPaymentStatus),
+      due_date: null,
       processed_by_ai: false,
       ai_processed_at: null,
       ai_confidence: null,
@@ -635,6 +739,7 @@ async function processUploadedObjectInBackground(args: {
     fileName,
     isPdf: ext === "pdf" || mime === "application/pdf",
     url,
+    requestedPaymentStatus,
   });
 }
 
@@ -653,6 +758,7 @@ export async function POST(request: Request) {
       fileType?: string;
       jobId?: string | null;
       clientId?: string | null;
+      payment_status?: string | null;
     } | null = null;
     try {
       body = (await request.json()) as {
@@ -663,6 +769,7 @@ export async function POST(request: Request) {
         fileType?: string;
         jobId?: string | null;
         clientId?: string | null;
+        payment_status?: string | null;
       };
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -676,6 +783,7 @@ export async function POST(request: Request) {
     });
     if (!linked.ok) return linked.response;
     linkedContext = linked.context;
+    const requestedPaymentStatus = parseRequestedPaymentStatus(body?.payment_status);
     const key = (body?.key || "").trim();
     const publicUrl = (body?.publicUrl || "").trim();
     const fileName = (body?.fileName || "receipt.pdf").trim();
@@ -703,6 +811,7 @@ export async function POST(request: Request) {
         url: publicUrl,
         mime,
         fileName,
+        requestedPaymentStatus,
       }).catch((e) => {
         console.error("[scan-receipt] background finalize error:", e);
       });
@@ -742,6 +851,7 @@ export async function POST(request: Request) {
   });
   if (!linked.ok) return linked.response;
   linkedContext = linked.context;
+  const requestedPaymentStatus = parseRequestedPaymentStatus(form.get("payment_status"));
 
   const file = form.get("file");
   if (!file || !(file instanceof File)) {
@@ -819,6 +929,7 @@ export async function POST(request: Request) {
       ext,
       fileSha,
       displayFileName,
+      requestedPaymentStatus,
     }).catch((e) => {
       console.error("[scan-receipt] background pipeline error:", e);
     });

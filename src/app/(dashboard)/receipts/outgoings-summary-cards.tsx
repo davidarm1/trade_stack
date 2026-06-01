@@ -66,10 +66,7 @@ export function OutgoingsSummaryCards({
     }
 
     if (paid) {
-      const paidDate = toDate(row.payment_date);
-      if (paidDate && inCurrentMonth(paidDate, now)) {
-        paidThisMonth += amount;
-      }
+      paidThisMonth += amount;
     }
   }
 

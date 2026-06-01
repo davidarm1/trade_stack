@@ -5,6 +5,12 @@ import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
 import type { Receipt } from "@/types/database";
 
+export type EnrichedReceipt = Receipt & {
+  uploaded_by_name: string | null;
+  job_number: number | null;
+  job_title: string | null;
+};
+
 type ReceiptInsert = Partial<
   Omit<Receipt, "id" | "tenant_id" | "created_at" | "updated_at">
 >;
@@ -62,7 +68,7 @@ export async function updateReceipt(id: string, data: ReceiptInsert) {
   return { data: row, error: null };
 }
 
-export async function getReceipts() {
+export async function getReceipts(): Promise<{ data: EnrichedReceipt[] | null; error: string | null }> {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
@@ -73,7 +79,9 @@ export async function getReceipts() {
     .eq("tenant_id", ctx.tenantId);
 
   if (error) return { data: null, error: error.message };
-  const sorted = [...(data ?? [])].sort((a, b) => {
+  const rows = data ?? [];
+
+  const sorted = [...rows].sort((a, b) => {
     const aUnpaid = isUnpaid(a.payment_status);
     const bUnpaid = isUnpaid(b.payment_status);
     if (aUnpaid !== bUnpaid) return aUnpaid ? -1 : 1;
@@ -93,7 +101,29 @@ export async function getReceipts() {
     return bCreated - aCreated;
   });
 
-  return { data: sorted, error: null };
+  const uploaderIds = [...new Set(rows.map((r) => r.uploaded_by_id).filter(Boolean))] as string[];
+  const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
+
+  const [uploadersRes, jobsRes] = await Promise.all([
+    uploaderIds.length > 0
+      ? supabase.from("users").select("id, name").in("id", uploaderIds)
+      : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null }),
+    jobIds.length > 0
+      ? supabase.from("jobs").select("id, job_number, title").in("id", jobIds)
+      : Promise.resolve({ data: [] as { id: string; job_number: number | null; title: string | null }[], error: null }),
+  ]);
+
+  const uploaderMap = new Map((uploadersRes.data ?? []).map((u) => [u.id, u.name]));
+  const jobMap = new Map((jobsRes.data ?? []).map((j) => [j.id, { job_number: j.job_number, title: j.title }]));
+
+  const enriched: EnrichedReceipt[] = sorted.map((r) => ({
+    ...r,
+    uploaded_by_name: r.uploaded_by_id ? (uploaderMap.get(r.uploaded_by_id) ?? null) : null,
+    job_number: r.job_id ? (jobMap.get(r.job_id)?.job_number ?? null) : null,
+    job_title: r.job_id ? (jobMap.get(r.job_id)?.title ?? null) : null,
+  }));
+
+  return { data: enriched, error: null };
 }
 
 /** Invalidate the outgoings page cache (e.g. after upload). Call from client after a successful save. */

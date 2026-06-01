@@ -10,6 +10,7 @@ import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
 import { sendInvoiceEmail } from "@/lib/resend";
 import type { Job } from "@/types/database";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
+import { logAuditEvent } from "@/lib/audit";
 
 type JobInsert = Partial<
   Omit<Job, "id" | "tenant_id" | "created_at" | "updated_at">
@@ -95,6 +96,13 @@ export async function updateJob(id: string, data: JobInsert) {
   const supabase = await createClient();
 
   const { job_number: _omitImmutable, ...safe } = data;
+
+  // Unassigning an engineer must also clear sent/received timestamps —
+  // the jobs_sent_requires_assigned_engineer constraint forbids a sent job with no engineer.
+  if ("assigned_engineer_id" in safe && safe.assigned_engineer_id === null) {
+    (safe as Record<string, unknown>).sent_to_engineer_at = null;
+    (safe as Record<string, unknown>).received_from_engineer_at = null;
+  }
 
   const { data: row, error } = await supabase
     .from("jobs")
@@ -268,6 +276,7 @@ export async function updateJobCompletionDetails(
   data: {
     work_carried_out?: string | null;
     parts_used?: string | null;
+    recommendations?: string | null;
   },
 ) {
   const ctx = await getTenantContext();
@@ -278,6 +287,7 @@ export async function updateJobCompletionDetails(
   const payload = {
     work_carried_out: String(data.work_carried_out ?? "").trim() || null,
     parts_used: String(data.parts_used ?? "").trim() || null,
+    recommendations: String(data.recommendations ?? "").trim() || null,
   };
 
   const { data: existing, error: existingErr } = await supabase
@@ -722,3 +732,48 @@ export const getJob = cache(async function getJob(id: string) {
     error: null,
   };
 });
+
+export async function rescheduleJob(
+  id: string,
+  newDate: string,
+): Promise<{ error: string | null }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    return { error: "Invalid date format — expected YYYY-MM-DD" };
+  }
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { error: ctx.error };
+  const supabase = await createClient();
+
+  const { data: current, error: fetchErr } = await supabase
+    .from("jobs")
+    .select("date_onsite")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+
+  if (fetchErr) return { error: fetchErr.message };
+  if (!current) return { error: "Job not found" };
+
+  const { error: updateErr } = await supabase
+    .from("jobs")
+    .update({ date_onsite: newDate, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId);
+
+  if (updateErr) return { error: updateErr.message };
+
+  await logAuditEvent({
+    event: "job_rescheduled",
+    tenant_id: ctx.tenantId,
+    user_id: ctx.userId,
+    metadata: {
+      job_id: id,
+      old_date: (current as { date_onsite?: string | null }).date_onsite ?? null,
+      new_date: newDate,
+    },
+  });
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${id}`);
+  return { error: null };
+}

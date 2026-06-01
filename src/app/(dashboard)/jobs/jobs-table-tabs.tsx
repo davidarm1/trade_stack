@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { parsePayTab, type PayTab } from "@/lib/jobs-payment-buckets";
 
 type Props = {
+  pastDueCount: number;
+  pastDueValue: string;
   weekCount: number;
   futureCount: number;
   todoCount: number;
@@ -16,7 +18,7 @@ type Props = {
 
 function buildHref(
   status: string,
-  range: "week" | "future",
+  range: "week" | "future" | "pastdue",
   pay: PayTab,
   q: string,
 ) {
@@ -29,6 +31,8 @@ function buildHref(
 }
 
 export function JobsTableTabs({
+  pastDueCount,
+  pastDueValue,
   weekCount,
   futureCount,
   todoCount,
@@ -39,7 +43,9 @@ export function JobsTableTabs({
 }: Props) {
   const searchParams = useSearchParams();
   const status = searchParams.get("status") ?? "";
-  const range = searchParams.get("range") === "future" ? "future" : "week";
+  const rawRange = searchParams.get("range");
+  const range: "week" | "future" | "pastdue" =
+    rawRange === "future" ? "future" : rawRange === "pastdue" ? "pastdue" : "week";
   const pay = parsePayTab(searchParams.get("pay") ?? undefined);
   const q = searchParams.get("q") ?? "";
 
@@ -61,6 +67,18 @@ export function JobsTableTabs({
           Jobs this week ({weekCount})
         </Link>
         <Link
+          href={buildHref(status, "pastdue", "work", q)}
+          className={`rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+            range === "pastdue" && pay === "work"
+              ? "bg-red-100 font-semibold text-red-900 shadow-sm"
+              : pastDueCount > 0
+                ? "font-medium text-red-600 hover:text-red-900"
+                : "font-medium text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          Past due ({pastDueCount}){pastDueCount > 0 && range !== "pastdue" ? ` ${pastDueValue}` : ""}
+        </Link>
+        <Link
           href={buildHref(status, "future", "work", q)}
           className={`rounded-md px-2.5 py-1.5 text-sm transition-colors ${
             range === "future" && pay === "work"
@@ -68,7 +86,7 @@ export function JobsTableTabs({
               : "font-medium text-slate-600 hover:text-slate-900"
           }`}
         >
-          Future jobs ({futureCount})
+          Upcoming jobs ({futureCount})
         </Link>
       </div>
 
@@ -80,7 +98,7 @@ export function JobsTableTabs({
             : "border-transparent bg-slate-100 font-medium text-slate-700 hover:bg-slate-200/80"
         }`}
       >
-        To be invoiced ({todoCount})
+        Ready to invoice ({todoCount})
       </Link>
       <Link
         href={buildHref(status, range, "outstanding", q)}
