@@ -5,11 +5,16 @@ import { useSearchParams } from "next/navigation";
 import { parsePayTab, type PayTab } from "@/lib/jobs-payment-buckets";
 
 type Props = {
+  todayCount: number;
+  todayTotal: string;
   pastDueCount: number;
   pastDueValue: string;
   weekCount: number;
+  weekTotal: string;
   futureCount: number;
+  futureTotal: string;
   todoCount: number;
+  todoTotal: string;
   outstandingCount: number;
   outstandingTotal: string;
   overdueCount: number;
@@ -18,7 +23,7 @@ type Props = {
 
 function buildHref(
   status: string,
-  range: "week" | "future" | "pastdue",
+  range: "today" | "week" | "future" | "pastdue",
   pay: PayTab,
   q: string,
 ) {
@@ -30,12 +35,21 @@ function buildHref(
   return `/jobs?${p.toString()}`;
 }
 
+function labelWithTotal(label: string, count: number, total: string) {
+  return `${label} (${count})${count > 0 ? ` ${total}` : ""}`;
+}
+
 export function JobsTableTabs({
+  todayCount,
+  todayTotal,
   pastDueCount,
   pastDueValue,
   weekCount,
+  weekTotal,
   futureCount,
+  futureTotal,
   todoCount,
+  todoTotal,
   outstandingCount,
   outstandingTotal,
   overdueCount,
@@ -44,8 +58,14 @@ export function JobsTableTabs({
   const searchParams = useSearchParams();
   const status = searchParams.get("status") ?? "";
   const rawRange = searchParams.get("range");
-  const range: "week" | "future" | "pastdue" =
-    rawRange === "future" ? "future" : rawRange === "pastdue" ? "pastdue" : "week";
+  const range: "today" | "week" | "future" | "pastdue" =
+    rawRange === "today"
+      ? "today"
+      : rawRange === "future"
+        ? "future"
+        : rawRange === "pastdue"
+          ? "pastdue"
+          : "week";
   const pay = parsePayTab(searchParams.get("pay") ?? undefined);
   const q = searchParams.get("q") ?? "";
 
@@ -57,6 +77,16 @@ export function JobsTableTabs({
         aria-label="Job date range"
       >
         <Link
+          href={buildHref(status, "today", "work", q)}
+          className={`rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+            range === "today" && pay === "work"
+              ? "bg-slate-100 font-semibold text-slate-900 shadow-sm"
+              : "font-medium text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          {labelWithTotal("Jobs today", todayCount, todayTotal)}
+        </Link>
+        <Link
           href={buildHref(status, "week", "work", q)}
           className={`rounded-md px-2.5 py-1.5 text-sm transition-colors ${
             range === "week" && pay === "work"
@@ -64,7 +94,7 @@ export function JobsTableTabs({
               : "font-medium text-slate-600 hover:text-slate-900"
           }`}
         >
-          Jobs this week ({weekCount})
+          {labelWithTotal("Jobs this week", weekCount, weekTotal)}
         </Link>
         <Link
           href={buildHref(status, "pastdue", "work", q)}
@@ -76,7 +106,7 @@ export function JobsTableTabs({
                 : "font-medium text-slate-600 hover:text-slate-900"
           }`}
         >
-          Past due ({pastDueCount}){pastDueCount > 0 && range !== "pastdue" ? ` ${pastDueValue}` : ""}
+          {labelWithTotal("Past due", pastDueCount, pastDueValue)}
         </Link>
         <Link
           href={buildHref(status, "future", "work", q)}
@@ -86,7 +116,7 @@ export function JobsTableTabs({
               : "font-medium text-slate-600 hover:text-slate-900"
           }`}
         >
-          Upcoming jobs ({futureCount})
+          {labelWithTotal("Upcoming jobs", futureCount, futureTotal)}
         </Link>
       </div>
 
@@ -98,7 +128,7 @@ export function JobsTableTabs({
             : "border-transparent bg-slate-100 font-medium text-slate-700 hover:bg-slate-200/80"
         }`}
       >
-        Ready to invoice ({todoCount})
+        {labelWithTotal("Ready to invoice", todoCount, todoTotal)}
       </Link>
       <Link
         href={buildHref(status, range, "outstanding", q)}
@@ -108,8 +138,7 @@ export function JobsTableTabs({
             : "border-transparent bg-slate-100 font-medium text-blue-700 underline hover:bg-slate-200/80"
         }`}
       >
-        Invoiced ({outstandingCount})
-        {outstandingCount > 0 ? ` ${outstandingTotal}` : ""}
+        {labelWithTotal("Awaiting Payment", outstandingCount, outstandingTotal)}
       </Link>
       <Link
         href={buildHref(status, range, "overdue", q)}
@@ -119,8 +148,7 @@ export function JobsTableTabs({
             : "border-transparent bg-red-500 font-medium text-white underline hover:bg-red-600"
         }`}
       >
-        Payment overdue ({overdueCount})
-        {overdueCount > 0 ? ` ${overdueTotal}` : ""}
+        {labelWithTotal("Overdue Payments", overdueCount, overdueTotal)}
       </Link>
     </div>
   );

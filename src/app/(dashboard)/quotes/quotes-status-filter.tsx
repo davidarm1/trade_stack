@@ -22,6 +22,7 @@ export function QuotesStatusFilter() {
         className="rounded-md border border-slate-300 px-3 py-2 text-sm"
       >
         <option value="">All</option>
+        <option value="awaiting_response">Awaiting response</option>
         <option value="pending">Pending</option>
         <option value="quoted">Quoted</option>
         <option value="draft">Draft</option>

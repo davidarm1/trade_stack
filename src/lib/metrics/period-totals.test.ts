@@ -117,6 +117,7 @@ function makeJob(overrides: Partial<{
 
 const BASE_INPUT = {
   receiptsTotal: 0,
+  receiptsVatTotal: 0,
   wagesPaid: 0,
   quotesRows: [],
   followups: [],

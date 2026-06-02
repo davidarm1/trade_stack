@@ -218,10 +218,16 @@ export default async function Page({
   const params = await searchParams;
   const statusFilter = params.status ?? "";
   const searchQuery = params.q?.trim() ?? "";
-  type RangeParam = "week" | "future" | "pastdue";
+  type RangeParam = "today" | "week" | "future" | "pastdue";
   const rawRange = params.range;
   const range: RangeParam =
-    rawRange === "future" ? "future" : rawRange === "pastdue" ? "pastdue" : "week";
+    rawRange === "today"
+      ? "today"
+      : rawRange === "future"
+        ? "future"
+        : rawRange === "pastdue"
+          ? "pastdue"
+          : "week";
   const pay = parsePayTab(params.pay);
   const followupFilter = parseFollowupFilter(params.followup);
 
@@ -287,7 +293,8 @@ export default async function Page({
     return activeWorkStatuses.has(status);
   });
 
-  const todoCount = statusFiltered.filter((j) => inTodoBucket(payRow(j))).length;
+  const todoForTotals = statusFiltered.filter((j) => inTodoBucket(payRow(j)));
+  const todoCount = todoForTotals.length;
   const outstandingForTotals = statusFiltered.filter((j) =>
     inOutstandingBucket(payRow(j)),
   );
@@ -301,11 +308,16 @@ export default async function Page({
     sumJobAmounts(outstandingForTotals as JobPayFields[]),
     currencyCode,
   );
+  const todoTotal = formatCurrency(sumJobAmounts(todoForTotals as JobPayFields[]), currencyCode);
   const overdueTotal = formatCurrency(
     sumJobAmounts(overdueForTotals as JobPayFields[]),
     currencyCode,
   );
 
+  const todayJobs = workQueue.filter((j) => {
+    const raw = String((j as { date_onsite?: string | null }).date_onsite ?? "").split("T")[0] ?? "";
+    return raw === todayKey;
+  });
   const weekJobs = workQueue.filter((j) =>
     localDateKeyInRange(
       (j as { date_onsite?: string | null }).date_onsite,
@@ -331,6 +343,9 @@ export default async function Page({
     sumJobAmounts(pastDueJobsList as JobPayFields[]),
     currencyCode,
   );
+  const todayTotal = formatCurrency(sumJobAmounts(todayJobs as JobPayFields[]), currencyCode);
+  const weekTotal = formatCurrency(sumJobAmounts(weekJobs as JobPayFields[]), currencyCode);
+  const futureTotal = formatCurrency(sumJobAmounts(futureJobs as JobPayFields[]), currencyCode);
 
   const payFiltered =
     pay === "work"
@@ -340,11 +355,13 @@ export default async function Page({
   // Build the display list
   let list: JobsTableRow[] =
     pay === "work"
-      ? range === "future"
-        ? futureJobs
-        : range === "pastdue"
-          ? (pastDueJobsList as JobsTableRow[])
-          : weekJobs
+      ? range === "today"
+        ? todayJobs
+        : range === "future"
+          ? futureJobs
+          : range === "pastdue"
+            ? (pastDueJobsList as JobsTableRow[])
+            : weekJobs
       : (payFiltered as JobsTableRow[]);
 
   // Overdue tab: filter out resolved, apply followup bucket filter, then sort
@@ -404,11 +421,13 @@ export default async function Page({
     emptyMessage = "No jobs match this status filter.";
   } else if (pay === "work" && list.length === 0) {
     emptyMessage =
-      range === "future"
-        ? "No future jobs scheduled beyond this week."
-        : range === "pastdue"
-          ? "No past-due jobs — all scheduled work is up to date."
-          : "No active jobs this week.";
+      range === "today"
+        ? "No jobs scheduled for today."
+        : range === "future"
+          ? "No future jobs scheduled beyond this week."
+          : range === "pastdue"
+            ? "No past-due jobs — all scheduled work is up to date."
+            : "No active jobs this week.";
   } else if (payFiltered.length === 0 && pay !== "work") {
     emptyMessage =
       pay === "todo"
@@ -460,11 +479,16 @@ export default async function Page({
           }
         >
           <JobsTableTabs
+            todayCount={todayJobs.length}
+            todayTotal={todayTotal}
             pastDueCount={pastDueCount}
             pastDueValue={pastDueValue}
             weekCount={weekJobs.length}
+            weekTotal={weekTotal}
             futureCount={futureJobs.length}
+            futureTotal={futureTotal}
             todoCount={todoCount}
+            todoTotal={todoTotal}
             outstandingCount={outstandingCount}
             outstandingTotal={outstandingTotal}
             overdueCount={overdueCount}

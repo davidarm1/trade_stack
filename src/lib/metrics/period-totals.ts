@@ -22,17 +22,36 @@ type ComputedMetrics = {
   invoicedAccrued: number;
   taxReserve: number; // 20% of invoicedAccrued
   spendableThisMonth: number; // netProfit - taxReserve, floor 0
+  vatLiabilityEstimate: number;
 
   // Work queue
+  jobsToday: number;
+  jobsTodayValue: number;
   jobsThisWeek: number;
+  jobsThisWeekValue: number;
   upcomingJobs: number;
+  upcomingJobsValue: number;
   overdueCount: number;
   overdueValue: number;
   readyToInvoice: number;
+  readyToInvoiceValue: number;
   awaitingPayment: number;
   awaitingPaymentValue: number;
   pendingQuotes: number;
   pendingQuotesValue: number;
+  quotesAwaitingResponse: number;
+  quotesAwaitingResponseValue: number;
+  leadQuotes: number;
+  leadQuotesValue: number;
+  quotesSentThisMonth: number;
+  quotesSentThisMonthValue: number;
+  quotesWonThisMonth: number;
+  quotesWonThisMonthValue: number;
+  quoteConversionRate: number;
+  invoicedThisMonthCount: number;
+  invoicedThisMonthValue: number;
+  paidThisMonthCount: number;
+  paidThisMonthValue: number;
 
   // Scheduling: past due (date_onsite < today, status not completed/cancelled)
   // Always relative to `now`, independent of the month param.
@@ -147,6 +166,15 @@ export function londonWeekDateKeys(now: Date): {
 type JobRow = JobPayFields & {
   id: string;
   date_onsite?: string | null;
+  vat_amount?: number | null;
+};
+
+type QuoteRow = {
+  id: string;
+  price?: number | null;
+  status?: string | null;
+  quote_date?: string | null;
+  created_at?: string | null;
 };
 
 type FollowupRow = {
@@ -173,13 +201,23 @@ function dateKeyInRange(
   return raw >= startKey && raw <= endKey;
 }
 
+function dateKeyForQuote(q: QuoteRow): string | null {
+  const raw = String(q.quote_date ?? q.created_at ?? "").split("T")[0] ?? "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+function quoteStatus(q: QuoteRow): string {
+  return (q.status ?? "").trim().toLowerCase();
+}
+
 // ── pure computation (exported so tests can drive it directly) ───────────────
 
 export type ComputeInput = {
   jobs: JobRow[];
   receiptsTotal: number;
   wagesPaid: number;
-  quotesRows: { price?: number | null }[];
+  receiptsVatTotal: number;
+  quotesRows: QuoteRow[];
   followups: FollowupRow[];
   year: number;
   month: number;
@@ -190,6 +228,7 @@ export function computePeriodMetrics({
   jobs,
   receiptsTotal,
   wagesPaid,
+  receiptsVatTotal,
   quotesRows,
   followups,
   year,
@@ -225,6 +264,8 @@ export function computePeriodMetrics({
     return raw > weekEndKey;
   });
 
+  const todayJobs = workQueue.filter((j) => dateKeyInRange(j.date_onsite, todayKey, todayKey));
+
   const todoJobs = jobs.filter((j) => inTodoBucket(j));
   const outstandingJobs = jobs.filter((j) => inOutstandingBucket(j));
   const overdueJobs = jobs.filter((j) => inOverdueBucket(j));
@@ -241,12 +282,60 @@ export function computePeriodMetrics({
   const netProfit = incomeReceived - receiptsTotal - wagesPaid;
   const taxReserve = invoicedAccrued > 0 ? invoicedAccrued * TAX_RESERVE_RATE : 0;
   const spendableThisMonth = Math.max(0, netProfit - taxReserve);
+  const vatOnInvoicesThisMonth = invoicedThisMonth.reduce(
+    (s, j) => s + Number(j.vat_amount ?? 0),
+    0,
+  );
+  const vatLiabilityEstimate = vatOnInvoicesThisMonth - receiptsVatTotal;
 
-  const pendingQuotes = quotesRows.length;
-  const pendingQuotesValue = quotesRows.reduce(
+  const quotesAwaitingResponseRows = quotesRows.filter((q) => {
+    const status = quoteStatus(q);
+    return status === "pending" || status === "sent";
+  });
+  const openQuoteRows = quotesRows.filter((q) => {
+    const status = quoteStatus(q);
+    return status === "draft" || status === "pending" || status === "quoted" || status === "sent";
+  });
+  const monthStartKey = `${year}-${pad2(month)}-01`;
+  const monthEndKey = new Date(year, month, 0).toISOString().slice(0, 10);
+  const sentQuotesThisMonthRows = quotesRows.filter((q) => {
+    const quoteDay = dateKeyForQuote(q);
+    return !!quoteDay && quoteDay >= monthStartKey && quoteDay <= monthEndKey && quoteStatus(q) === "sent";
+  });
+  const wonQuotesThisMonthRows = quotesRows.filter((q) => {
+    const quoteDay = dateKeyForQuote(q);
+    const status = quoteStatus(q);
+    return !!quoteDay && quoteDay >= monthStartKey && quoteDay <= monthEndKey && (status === "accepted" || status === "booked");
+  });
+
+  const leadQuotesRows = quotesRows.filter((q) => {
+    const status = quoteStatus(q);
+    return status === "draft" || status === "pending";
+  });
+  const leadQuotes = leadQuotesRows.length;
+  const leadQuotesValue = leadQuotesRows.reduce((s, r) => s + Number(r.price ?? 0), 0);
+
+  const pendingQuotes = openQuoteRows.length;
+  const pendingQuotesValue = openQuoteRows.reduce(
     (s, r) => s + Number(r.price ?? 0),
     0,
   );
+  const quotesAwaitingResponse = quotesAwaitingResponseRows.length;
+  const quotesAwaitingResponseValue = quotesAwaitingResponseRows.reduce(
+    (s, r) => s + Number(r.price ?? 0),
+    0,
+  );
+  const quotesSentThisMonth = sentQuotesThisMonthRows.length;
+  const quotesSentThisMonthValue = sentQuotesThisMonthRows.reduce(
+    (s, r) => s + Number(r.price ?? 0),
+    0,
+  );
+  const quotesWonThisMonth = wonQuotesThisMonthRows.length;
+  const quotesWonThisMonthValue = wonQuotesThisMonthRows.reduce(
+    (s, r) => s + Number(r.price ?? 0),
+    0,
+  );
+  const quoteConversionRate = quotesSentThisMonth > 0 ? (quotesWonThisMonth / quotesSentThisMonth) * 100 : 0;
 
   // Overdue sub-buckets
   const followupMap = new Map<string, FollowupRow>();
@@ -294,17 +383,36 @@ export function computePeriodMetrics({
     invoicedAccrued,
     taxReserve,
     spendableThisMonth,
+    vatLiabilityEstimate,
+    jobsToday: todayJobs.length,
+    jobsTodayValue: sumJobAmounts(todayJobs),
     pastDueJobs: pastDueItems.length,
     pastDueJobsValue: sumJobAmounts(pastDueItems),
     jobsThisWeek: weekJobs.length,
+    jobsThisWeekValue: sumJobAmounts(weekJobs),
     upcomingJobs: futureJobs.length,
+    upcomingJobsValue: sumJobAmounts(futureJobs),
     overdueCount: overdueJobs.length,
     overdueValue: sumJobAmounts(overdueJobs),
     readyToInvoice: todoJobs.length,
+    readyToInvoiceValue: sumJobAmounts(todoJobs),
     awaitingPayment: outstandingJobs.length,
     awaitingPaymentValue: sumJobAmounts(outstandingJobs),
     pendingQuotes,
     pendingQuotesValue,
+    quotesAwaitingResponse,
+    quotesAwaitingResponseValue,
+    leadQuotes,
+    leadQuotesValue,
+    quotesSentThisMonth,
+    quotesSentThisMonthValue,
+    quotesWonThisMonth,
+    quotesWonThisMonthValue,
+    quoteConversionRate,
+    invoicedThisMonthCount: invoicedThisMonth.length,
+    invoicedThisMonthValue: invoicedAccrued,
+    paidThisMonthCount: paidThisMonth.length,
+    paidThisMonthValue: incomeReceived,
     overdueNeedsFirstContact,
     overduePromisedThisWeek,
     overdueAwaitingReply,
@@ -315,7 +423,7 @@ export function computePeriodMetrics({
 // ── async fetcher ─────────────────────────────────────────────────────────────
 
 const JOB_SELECT =
-  "id,status,payment_status,payment_terms_days,subtotal,total_inc_vat,invoice_sent_at,invoice_paid_at,date_onsite,deleted_at";
+  "id,status,payment_status,payment_terms_days,subtotal,total_inc_vat,vat_amount,invoice_sent_at,invoice_paid_at,date_onsite,deleted_at";
 
 export async function getPeriodMetrics(
   supabase: SupabaseClient,
@@ -327,7 +435,7 @@ export async function getPeriodMetrics(
   const monthStartDate = `${year}-${pad2(month)}-01`;
   const monthEndDate = new Date(year, month, 0).toISOString().slice(0, 10);
 
-  const [jobsRes, receiptsRes, quotesRes, wagesRes, followupsRes, tenantRes] = await Promise.all([
+  const [jobsRes, receiptsRes, receiptsVatRes, quotesRes, wagesRes, followupsRes, tenantRes] = await Promise.all([
     supabase
       .from("jobs")
       .select(JOB_SELECT)
@@ -342,11 +450,18 @@ export async function getPeriodMetrics(
       .gte("invoice_date", monthStartDate)
       .lte("invoice_date", monthEndDate),
     supabase
+      .from("receipts")
+      .select("amount_tax, invoice_date")
+      .eq("tenant_id", tenantId)
+      .is("parent_receipt_id", null)
+      .gte("invoice_date", monthStartDate)
+      .lte("invoice_date", monthEndDate),
+    supabase
       .from("quotes")
-      .select("id, price")
+      .select("id, price, status, quote_date, created_at")
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
-      .in("status", ["draft", "sent", "pending"]),
+      .in("status", ["draft", "sent", "pending", "quoted", "accepted", "declined", "booked"]),
     supabase
       .from("wages")
       .select("total_wage")
@@ -366,16 +481,20 @@ export async function getPeriodMetrics(
     (s, r) => s + Number((r as { amount_total?: number | null }).amount_total ?? 0),
     0,
   );
+  const receiptsVatTotal = (receiptsVatRes.data ?? []).reduce(
+    (s, r) => s + Number((r as { amount_tax?: number | null }).amount_tax ?? 0),
+    0,
+  );
   const wagesPaid = (wagesRes.data ?? []).reduce(
     (s, r) => s + Number((r as { total_wage?: number | null }).total_wage ?? 0),
     0,
   );
-  const quotesRows = (quotesRes.data ?? []) as { price?: number | null }[];
+  const quotesRows = (quotesRes.data ?? []) as QuoteRow[];
   const followups = (followupsRes.data ?? []) as FollowupRow[];
   const currencyCode = (tenantRes.data?.currency as string | null) ?? null;
 
   return {
     currencyCode,
-    ...computePeriodMetrics({ jobs, receiptsTotal, wagesPaid, quotesRows, followups, year, month, now }),
+    ...computePeriodMetrics({ jobs, receiptsTotal, receiptsVatTotal, wagesPaid, quotesRows, followups, year, month, now }),
   };
 }

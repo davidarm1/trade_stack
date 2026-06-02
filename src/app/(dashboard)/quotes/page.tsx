@@ -141,7 +141,11 @@ export default async function QuotesPage({
 
   const list = (rows ?? []).filter((q: { status?: string | null }) => {
     if (!statusFilter) return true;
-    return (q.status ?? "") === statusFilter;
+    const status = (q.status ?? "").trim().toLowerCase();
+    if (statusFilter === "awaiting_response") {
+      return status === "pending" || status === "sent";
+    }
+    return status === statusFilter;
   });
 
   return (
