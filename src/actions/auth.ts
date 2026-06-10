@@ -13,6 +13,7 @@ import {
   tenantPlanValue,
   type PackageId,
 } from "@/lib/plans";
+import { generateAndSendPasswordResetEmail } from "@/lib/password-reset";
 import type { UserRole } from "@/types/database";
 
 const redis = new Redis({
@@ -25,38 +26,7 @@ const signInRateLimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(5, "15 m"),
 });
 
-function appOriginForAuth(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (explicit?.startsWith("http")) return explicit;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
-}
 
-/** Prefer the browser’s current origin so LAN/dev hosts match Supabase redirect allow list. */
-async function appOriginForPasswordReset(): Promise<string> {
-  const h = await headers();
-  const origin = h.get("origin");
-  if (origin) {
-    try {
-      const u = new URL(origin);
-      if (u.protocol === "http:" || u.protocol === "https:") {
-        return u.origin;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  const host =
-    h.get("x-forwarded-host")?.split(",")[0]?.trim() ?? h.get("host")?.trim();
-  if (host) {
-    const proto =
-      h.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "http";
-    if (proto === "http" || proto === "https") {
-      return `${proto}://${host}`;
-    }
-  }
-  return appOriginForAuth();
-}
 
 function slugify(name: string): string {
   const s = name
@@ -375,64 +345,13 @@ export async function signOut() {
 
 type PasswordResetResult = {
   error: string | null;
-  /** Echoed so you can paste into Supabase → Auth → Redirect URLs if email fails. */
-  redirectToUsed?: string;
-  /**
-   * Dev only: same link Supabase puts in the email (requires service role).
-   * Set `DEV_SHOW_PASSWORD_RESET_LINK=true` in `.env.local`. Never in production.
-   */
-  devRecoveryUrl?: string;
-  /** Dev-only diagnostics when the link could not be generated. */
-  devRecoveryDiag?: string;
 };
 
-/** Sends Supabase password-reset email; link targets `/auth/reset-password`. */
+/** Sends password-reset email via Resend; link targets `/auth/reset-password`. */
 export async function requestPasswordReset(
   email: string,
 ): Promise<PasswordResetResult> {
-  const trimmed = email.trim();
-  if (!trimmed) {
-    return { error: "Enter your email address." };
-  }
-  const supabase = await createClient();
-  const base = await appOriginForPasswordReset();
-  const redirectTo = `${base.replace(/\/$/, "")}/auth/reset-password`;
-
-  let devRecoveryUrl: string | undefined;
-  let devRecoveryDiag: string | undefined;
-  if (
-    process.env.NODE_ENV === "development" &&
-    process.env.DEV_SHOW_PASSWORD_RESET_LINK === "true"
-  ) {
-    try {
-      const admin = createServiceRoleClient();
-      const { data, error: glErr } = await admin.auth.admin.generateLink({
-        type: "recovery",
-        email: trimmed,
-        options: { redirectTo },
-      });
-      if (glErr) {
-        devRecoveryDiag = glErr.message;
-      } else {
-        const props = data?.properties as { action_link?: string } | undefined;
-        const action = props?.action_link;
-        if (action) devRecoveryUrl = action;
-        else devRecoveryDiag = "generateLink returned no action_link.";
-      }
-    } catch (e) {
-      devRecoveryDiag =
-        e instanceof Error
-          ? e.message
-          : "Could not use service role (check SUPABASE_SERVICE_ROLE_KEY).";
-    }
-  }
-
-  const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-    redirectTo,
-  });
-  const extra = { redirectToUsed: redirectTo, devRecoveryUrl, devRecoveryDiag };
-  if (error) return { error: error.message, ...extra };
-  return { error: null, ...extra };
+  return generateAndSendPasswordResetEmail(email);
 }
 
 /** Register wizard — test payment step (no card data in URL). */

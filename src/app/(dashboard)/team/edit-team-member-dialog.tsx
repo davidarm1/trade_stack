@@ -9,6 +9,8 @@ import {
   updateTeamMember,
 } from "@/actions/team";
 import { TEAM_ROLE_HELP } from "@/lib/nav-access";
+import { getTeamMemberActionPermission } from "@/lib/team-member-permissions";
+import { ALL_TEAM_ROLES } from "@/lib/team-roles";
 import type { UserRole } from "@/types/database";
 
 type Member = {
@@ -27,9 +29,6 @@ type MobileTokenRow = {
   revoked_at: string | null;
   used_at: string | null;
 };
-
-const ALL_ROLES: UserRole[] = ["owner", "office", "engineer", "viewer"];
-const NON_OWNER_ROLES: UserRole[] = ["office", "engineer", "viewer"];
 
 function roleLabel(r: UserRole) {
   return r.charAt(0).toUpperCase() + r.slice(1);
@@ -53,15 +52,29 @@ export function EditTeamMemberDialog({
   const [plainToken, setPlainToken] = useState<string | null>(null);
   const [mobileTokens, setMobileTokens] = useState<MobileTokenRow[]>([]);
 
-  const isOwner = currentUserRole === "owner";
-  const isOffice = currentUserRole === "office";
-  const canManage = isOwner || isOffice;
-  const targetIsOwner = member.role === "owner";
-  const roleLocked = isOffice && targetIsOwner;
+  const editPermission = getTeamMemberActionPermission({
+    action: "edit",
+    actorRole: currentUserRole,
+    actorUserId: currentUserId,
+    targetRole: member.role,
+    targetUserId: member.id,
+  });
+  const canEditRoles = currentUserRole === "owner" && member.id !== currentUserId;
+  const canToggleActive = currentUserRole === "owner" && member.id !== currentUserId;
+  const roleOptions: UserRole[] = ALL_TEAM_ROLES;
 
-  const roleOptions: UserRole[] = isOwner ? ALL_ROLES : NON_OWNER_ROLES;
-
-  if (!canManage) return null;
+  if (!editPermission.allowed) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={editPermission.reason}
+        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-400 opacity-60"
+      >
+        Edit
+      </button>
+    );
+  }
 
   async function reloadMobileTokens() {
     const { data, error: err } = await listMobileAccessTokens(member.id);
@@ -85,13 +98,12 @@ export function EditTeamMemberDialog({
     setPending(true);
     const form = new FormData(e.currentTarget);
     const name = String(form.get("name") ?? "").trim();
-    const role = String(form.get("role") ?? "") as UserRole;
-    const isActive =
-      member.id === currentUserId ? member.is_active : form.get("is_active") === "on";
+    const role = String(form.get("role") ?? member.role) as UserRole;
+    const isActive = canToggleActive ? form.get("is_active") === "on" : member.is_active;
 
     const { error: err } = await updateTeamMember(member.id, {
       name: name || null,
-      role: roleLocked ? undefined : role,
+      role,
       is_active: isActive,
     });
     setPending(false);
@@ -204,15 +216,7 @@ export function EditTeamMemberDialog({
                 >
                   Role
                 </label>
-                {roleLocked ? (
-                  <>
-                    <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      Only an owner can change an owner&apos;s role. You can still update their
-                      name or active status.
-                    </p>
-                    <input type="hidden" name="role" value={member.role} />
-                  </>
-                ) : (
+                {canEditRoles ? (
                   <select
                     id={`edit-role-${member.id}`}
                     name="role"
@@ -226,6 +230,28 @@ export function EditTeamMemberDialog({
                       </option>
                     ))}
                   </select>
+                ) : (
+                  <>
+                    <select
+                      id={`edit-role-${member.id}`}
+                      name="role"
+                      disabled
+                      defaultValue={member.role}
+                      className="mt-1 w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                    >
+                      {roleOptions.map((r) => (
+                        <option key={r} value={r}>
+                          {roleLabel(r)}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="hidden" name="role" value={member.role} />
+                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {member.id === currentUserId
+                        ? "You cannot change your own role."
+                        : "Only owners can change roles."}
+                    </p>
+                  </>
                 )}
                 <p className="mt-2 text-xs leading-relaxed text-slate-600">
                   {roleOptions.map((r) => (
@@ -241,14 +267,14 @@ export function EditTeamMemberDialog({
                   type="checkbox"
                   name="is_active"
                   defaultChecked={member.is_active}
-                  disabled={member.id === currentUserId}
+                  disabled={!canToggleActive}
                   className="rounded border-slate-300"
                 />
                 <span>Active (can sign in)</span>
               </label>
-              {member.id === currentUserId ? (
+              {!canToggleActive ? (
                 <p className="text-xs text-slate-500">
-                  You cannot deactivate your own account here.
+                  Only owners can change active state here.
                 </p>
               ) : null}
 

@@ -491,7 +491,11 @@ export function ReceiptsEditableTable({
   }
 
   function exportFileSuffix(): string {
-    if (customRange && rangeFrom) return rangeFrom.slice(0, 7);
+    if (customRange && rangeFrom) {
+      const start = rangeFrom.slice(0, 7);
+      const end = rangeTo ? rangeTo.slice(0, 7) : start;
+      return start === end ? start : `${start}-to-${end}`;
+    }
     const yr = selectedMonth.getUTCFullYear();
     const mo = String(selectedMonth.getUTCMonth() + 1).padStart(2, "0");
     return `${yr}-${mo}`;

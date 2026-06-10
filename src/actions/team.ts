@@ -6,14 +6,27 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getTenantContext } from "@/lib/tenant";
 import { logAuditEvent } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
+import { ALL_TEAM_ROLES, INVITABLE_ROLES } from "@/lib/team-roles";
+import { buildAuthConfirmUrl } from "@/lib/auth-links";
+import { sendInviteEmail } from "@/lib/email";
+import { generateAndSendPasswordResetEmail } from "@/lib/password-reset";
+import {
+  getTeamMemberActionPermission,
+} from "@/lib/team-member-permissions";
 import type { MobileAccessToken, UserRole, UserRow } from "@/types/database";
-
-const INVITABLE_ROLES: UserRole[] = ["office", "engineer", "viewer"];
 
 export type TeamMemberUpdate = {
   name?: string | null;
   role?: UserRole;
   is_active?: boolean;
+};
+
+type TeamActionResult = {
+  success: true;
+  error: null;
+} | {
+  success: false;
+  error: string;
 };
 
 type TeamActor = {
@@ -85,11 +98,61 @@ async function getTargetUserForTenant(
   return { id: data.id, role: data.role as UserRole };
 }
 
-function appOrigin(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (explicit?.startsWith("http")) return explicit;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+function isAlreadyRegisteredAuthError(error?: { message?: string; code?: string } | null): boolean {
+  const message = error?.message ?? "";
+  const code = error?.code ?? "";
+  return /already.*register|already.*exist|email_exists|duplicate/i.test(
+    `${code} ${message}`,
+  );
+}
+
+async function getTenantName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+): Promise<string> {
+  const { data } = await supabase
+    .from("tenants")
+    .select("name")
+    .eq("id", tenantId)
+    .maybeSingle();
+  return String(data?.name ?? "your team");
+}
+
+async function getTeamMemberForTenant(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  userId: string,
+): Promise<{ id: string; email: string | null; role: UserRole; is_active: boolean } | null> {
+  const { data } = await supabase
+    .from("users")
+    .select("id, email, role, is_active")
+    .eq("id", userId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!data?.id || !data.role) return null;
+  return {
+    id: data.id,
+    email: data.email ?? null,
+    role: data.role as UserRole,
+    is_active: Boolean(data.is_active),
+  };
+}
+
+async function syncTeamMemberAuthState(userId: string, active: boolean) {
+  let admin: ReturnType<typeof createServiceRoleClient>;
+  try {
+    admin = createServiceRoleClient();
+  } catch {
+    return {
+      error:
+        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable team member auth updates.",
+    };
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: active ? "none" : "87600h",
+  });
+  return { error: error?.message ?? null };
 }
 
 export async function inviteTeamMember(
@@ -104,7 +167,7 @@ export async function inviteTeamMember(
   if (!INVITABLE_ROLES.includes(role)) {
     return {
       data: null,
-      error: "Choose a valid role: office, engineer, or viewer.",
+      error: "Choose a valid role: owner, office, engineer, or viewer.",
     };
   }
 
@@ -121,45 +184,86 @@ export async function inviteTeamMember(
     return {
       data: null,
       error:
-        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable invites.",
+        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable team member creation.",
     };
   }
 
-  const redirectTo = `${appOrigin()}/login`;
-
-  const { data: invited, error: inviteErr } =
-    await admin.auth.admin.inviteUserByEmail(trimmedEmail, {
-      data: { name: trimmedName },
-      redirectTo,
-    });
-
-  if (inviteErr || !invited?.user) {
-    const msg = inviteErr?.message ?? "Invite failed";
-    if (/already|registered|exists/i.test(msg)) {
-      return {
-        data: null,
-        error:
-          "That email is already registered. They can sign in, or remove the account in Supabase Auth if it was a mistake.",
-      };
-    }
-    return { data: null, error: msg };
-  }
-
-  const userId = invited.user.id;
-
-  const { error: insertErr } = await admin.from("users").insert({
-    id: userId,
-    tenant_id: actor.tenantId,
+  const tenantId = actor.tenantId;
+  const tenantName = await getTenantName(admin, tenantId);
+  const baseUserRow = {
+    tenant_id: tenantId,
     name: trimmedName || null,
     email: trimmedEmail,
     role,
     is_active: true,
+  };
+
+  const { data: invited, error: inviteErr } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: trimmedEmail,
+    options: {
+      data: { tenant_id: tenantId, role },
+    },
   });
 
-  if (insertErr) {
-    await admin.auth.admin.deleteUser(userId);
-    return { data: null, error: insertErr.message };
+  if (inviteErr || !invited?.user) {
+    if (isAlreadyRegisteredAuthError(inviteErr)) {
+      return {
+        data: null,
+        error:
+          "That email already has a Supabase Auth account. Ask them to sign in, or remove the existing auth user before inviting them.",
+      };
+    }
+
+    const msg = inviteErr?.message ?? "Invite failed";
+    return { data: null, error: msg };
   }
+
+  const userId = invited.user.id;
+  const tokenHash = invited.properties?.hashed_token;
+  if (!tokenHash) {
+    await admin.auth.admin.deleteUser(userId);
+    return { data: null, error: "Could not build invite link." };
+  }
+
+  const inviteUrl = buildAuthConfirmUrl({
+    tokenHash,
+    type: "invite",
+    next: "/dashboard",
+  });
+
+  const { data: existing } = await admin
+    .from("users")
+    .select("tenant_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (existing && existing.tenant_id !== tenantId) {
+    await admin.auth.admin.deleteUser(userId);
+    return {
+      data: null,
+      error: "That auth user already belongs to a different tenant.",
+    };
+  }
+
+  const { error: upsertErr } = await admin.from("users").upsert(
+    {
+      id: userId,
+      ...baseUserRow,
+    },
+    { onConflict: "id" },
+  );
+
+  if (upsertErr) {
+    await admin.auth.admin.deleteUser(userId);
+    return { data: null, error: upsertErr.message };
+  }
+
+  await sendInviteEmail({
+    to: trimmedEmail,
+    tenantName,
+    role,
+    inviteUrl,
+  });
 
   revalidatePath("/team");
   return { data: { userId }, error: null };
@@ -172,7 +276,7 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
 
   const { data: target, error: tErr } = await supabase
     .from("users")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("id", id)
     .eq("tenant_id", actor.tenantId)
     .maybeSingle();
@@ -194,11 +298,14 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
   }
 
   if (data.role !== undefined && data.role !== target.role) {
-    if (data.role === "owner" && actor.role !== "owner") {
-      return { data: null, error: "Only an owner can assign the owner role." };
+    if (!ALL_TEAM_ROLES.includes(data.role)) {
+      return { data: null, error: "Choose a valid role." };
     }
-    if (target.role === "owner" && actor.role !== "owner") {
-      return { data: null, error: "Only an owner can change an owner's role." };
+    if (id === actor.userId) {
+      return { data: null, error: "You cannot change your own role." };
+    }
+    if (actor.role !== "owner") {
+      return { data: null, error: "Only owners can change roles." };
     }
     if (target.role === "owner" && data.role !== "owner") {
       const { count, error: cErr } = await supabase
@@ -210,6 +317,26 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
       if ((count ?? 0) <= 1) {
         return { data: null, error: "Cannot remove the last owner from the tenant." };
       }
+    }
+  }
+
+  const activeChanged =
+    data.is_active !== undefined && data.is_active !== target.is_active;
+  if (activeChanged) {
+    const permission = getTeamMemberActionPermission({
+      action: data.is_active ? "reactivate" : "deactivate",
+      actorRole: actor.role,
+      actorUserId: actor.userId,
+      targetRole: target.role,
+      targetUserId: target.id,
+    });
+    if (!permission.allowed) {
+      return { data: null, error: permission.reason };
+    }
+    const nextActive = (data.is_active ?? target.is_active) as boolean;
+    const authResult = await syncTeamMemberAuthState(target.id, nextActive);
+    if (authResult.error) {
+      return { data: null, error: authResult.error };
     }
   }
 
@@ -234,10 +361,125 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
     .select()
     .single();
 
-  if (error) return { data: null, error: error.message };
+  if (error) {
+    if (activeChanged) {
+      const rollback = await syncTeamMemberAuthState(target.id, target.is_active);
+      if (rollback.error) {
+        console.error("Failed to rollback team member auth state after DB update failure.", {
+          userId: id,
+          error: rollback.error,
+        });
+      }
+    }
+    return { data: null, error: error.message };
+  }
   revalidatePath("/team");
   revalidatePath("/", "layout");
   return { data: row, error: null };
+}
+
+export async function sendTeamMemberResetEmail(userId: string): Promise<TeamActionResult> {
+  const access = await requireTeamManagerAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { supabase, actor } = access;
+
+  const target = await getTeamMemberForTenant(supabase, actor.tenantId, userId);
+  if (!target) {
+    return { success: false, error: "You are not allowed to manage that user." };
+  }
+
+  const permission = getTeamMemberActionPermission({
+    action: "send-reset",
+    actorRole: actor.role,
+    actorUserId: actor.userId,
+    targetRole: target.role,
+    targetUserId: target.id,
+  });
+  if (!permission.allowed) {
+    return { success: false, error: permission.reason };
+  }
+  if (!target.email) {
+    return { success: false, error: "That user does not have an email address." };
+  }
+
+  const result = await generateAndSendPasswordResetEmail(target.email);
+  if (result.error) return { success: false, error: result.error };
+  return { success: true, error: null };
+}
+
+async function updateTeamMemberAuthAndProfile(args: {
+  userId: string;
+  nextActive: boolean;
+  actor: TeamActor;
+  supabase: Awaited<ReturnType<typeof createClient>>;
+}): Promise<TeamActionResult> {
+  const { userId, nextActive, actor, supabase } = args;
+  const target = await getTeamMemberForTenant(supabase, actor.tenantId, userId);
+  if (!target) {
+    return { success: false, error: "User not found." };
+  }
+
+  const permission = getTeamMemberActionPermission({
+    action: nextActive ? "reactivate" : "deactivate",
+    actorRole: actor.role,
+    actorUserId: actor.userId,
+    targetRole: target.role,
+    targetUserId: target.id,
+  });
+  if (!permission.allowed) {
+    return { success: false, error: permission.reason };
+  }
+
+  const authResult = await syncTeamMemberAuthState(userId, nextActive);
+  if (authResult.error) {
+    return { success: false, error: authResult.error };
+  }
+
+  const { error } = await supabase
+    .from("users")
+    .update({
+      is_active: nextActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .eq("tenant_id", actor.tenantId);
+
+  if (error) {
+    const rollback = await syncTeamMemberAuthState(userId, !nextActive);
+    if (rollback.error) {
+      console.error("Failed to rollback auth state after team member status update failed.", {
+        userId,
+        error: rollback.error,
+      });
+    }
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/team");
+  revalidatePath("/", "layout");
+  return { success: true, error: null };
+}
+
+export async function deactivateTeamMember(userId: string): Promise<TeamActionResult> {
+  const access = await requireTeamManagerAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  return updateTeamMemberAuthAndProfile({
+    userId,
+    nextActive: false,
+    actor: access.actor,
+    supabase: access.supabase,
+  });
+}
+
+export async function reactivateTeamMember(userId: string): Promise<TeamActionResult> {
+  const access = await requireTeamManagerAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  return updateTeamMemberAuthAndProfile({
+    userId,
+    nextActive: true,
+    actor: access.actor,
+    supabase: access.supabase,
+  });
 }
 
 function tenantTokenPrefix(tenantId: string): string {

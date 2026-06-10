@@ -201,7 +201,7 @@ export default function AccountSecurityPage() {
     setEnrollment(null);
     setCode("");
     if (required) {
-      router.push("/dashboard");
+      router.replace("/dashboard");
       router.refresh();
     } else {
       setMessage("Two-factor authentication is now enabled.");
@@ -229,11 +229,12 @@ export default function AccountSecurityPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-semibold text-slate-900">
-        Account security
+        {required ? "Two-factor authentication is required" : "Account security"}
       </h1>
       <p className="mt-1 text-sm text-slate-600">
-        Add an optional authenticator app code to protect your Trade Stack
-        account.
+        {required
+          ? "You must set up an authenticator app to continue."
+          : "Add an authenticator app code to protect your Trade Stack account."}
       </p>
 
       {required ? (
@@ -261,14 +262,16 @@ export default function AccountSecurityPage() {
               Two-Factor Authentication is enabled.
             </p>
             <AuthenticatorApps />
-            <button
-              type="button"
-              onClick={() => void handleRemove()}
-              disabled={pending}
-              className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
-            >
-              {pending ? "Removing…" : "Remove"}
-            </button>
+            {!required ? (
+              <button
+                type="button"
+                onClick={() => void handleRemove()}
+                disabled={pending}
+                className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+              >
+                {pending ? "Removing…" : "Remove"}
+              </button>
+            ) : null}
           </div>
         ) : null}
 

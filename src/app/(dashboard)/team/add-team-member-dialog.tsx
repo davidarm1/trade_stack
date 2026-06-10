@@ -3,14 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { inviteTeamMember } from "@/actions/team";
+import { INVITABLE_ROLES } from "@/lib/team-roles";
 import { TEAM_ROLE_HELP } from "@/lib/nav-access";
 import type { UserRole } from "@/types/database";
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: "office", label: "Office" },
-  { value: "engineer", label: "Engineer" },
-  { value: "viewer", label: "Viewer" },
-];
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = INVITABLE_ROLES.map((value: UserRole) => ({
+  value,
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+}));
 
 export function AddTeamMemberDialog() {
   const router = useRouter();
@@ -26,6 +26,11 @@ export function AddTeamMemberDialog() {
     const email = String(form.get("email") ?? "");
     const name = String(form.get("name") ?? "");
     const role = String(form.get("role") ?? "") as UserRole;
+    if (!INVITABLE_ROLES.includes(role)) {
+      setPending(false);
+      setError("Choose a valid role: owner, office, engineer, or viewer.");
+      return;
+    }
 
     const { error: err } = await inviteTeamMember(email, name, role);
     setPending(false);
@@ -69,8 +74,8 @@ export function AddTeamMemberDialog() {
               Add user
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              They will receive an email to set a password. Choose a role to
-              control which menus they can use.
+              Everyone gets an invite email to set their password. Choose a role
+              to control which menus they can use.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -156,7 +161,7 @@ export function AddTeamMemberDialog() {
                   disabled={pending}
                   className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {pending ? "Sending…" : "Send invite"}
+                  {pending ? "Adding…" : "Add user"}
                 </button>
               </div>
             </form>

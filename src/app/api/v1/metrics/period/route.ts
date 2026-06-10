@@ -43,8 +43,20 @@ export async function GET(request: Request) {
   const monthParam = url.searchParams.get("month");
 
   const now = new Date();
-  const year = yearParam ? Number(yearParam) : now.getFullYear();
-  const month = monthParam ? Number(monthParam) : now.getMonth() + 1;
+  let year = yearParam ? Number(yearParam) : now.getFullYear();
+  let month = now.getMonth() + 1;
+
+  if (monthParam) {
+    const monthMatch = /^(\d{4})-(\d{2})$/.exec(monthParam);
+    if (monthMatch) {
+      year = Number(monthMatch[1]);
+      month = Number(monthMatch[2]);
+    } else {
+      month = Number(monthParam);
+    }
+  } else if (yearParam) {
+    month = now.getMonth() + 1;
+  }
 
   if (!Number.isInteger(year) || year < 2000 || year > 2100) {
     return NextResponse.json({ error: "Invalid year" }, { status: 400 });
