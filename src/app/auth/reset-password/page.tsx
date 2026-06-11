@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { updatePassword } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
@@ -68,13 +69,20 @@ export default function ResetPasswordPage() {
       return;
     }
     setPending(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    const result = await updatePassword(password);
     setPending(false);
-    if (error) {
-      setFormError(error.message);
+
+    if (result.redirectTo) {
+      router.push(result.redirectTo);
+      router.refresh();
       return;
     }
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
+    }
+
     router.push("/dashboard");
     router.refresh();
   }

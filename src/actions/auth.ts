@@ -347,6 +347,34 @@ type PasswordResetResult = {
   error: string | null;
 };
 
+type PasswordUpdateResult = {
+  error: string | null;
+  redirectTo: string | null;
+};
+
+export async function updatePassword(password: string): Promise<PasswordUpdateResult> {
+  if (!password) {
+    return { error: "Enter a new password.", redirectTo: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    const message = error.message || "Could not update password.";
+    if (/AAL2 session is required to update email or password when MFA is enabled/i.test(message)) {
+      return {
+        error: null,
+        redirectTo: "/auth/mfa-challenge?next=/auth/reset-password",
+      };
+    }
+    return { error: message, redirectTo: null };
+  }
+
+  revalidatePath("/", "layout");
+  return { error: null, redirectTo: "/dashboard" };
+}
+
 /** Sends password-reset email via Resend; link targets `/auth/reset-password`. */
 export async function requestPasswordReset(
   email: string,
