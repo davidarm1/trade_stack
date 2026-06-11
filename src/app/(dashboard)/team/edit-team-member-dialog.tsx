@@ -6,6 +6,7 @@ import {
   generateMobileAccessToken,
   listMobileAccessTokens,
   revokeMobileAccessToken,
+  resetTeamMemberMfa,
   updateTeamMember,
 } from "@/actions/team";
 import { TEAM_ROLE_HELP } from "@/lib/nav-access";
@@ -51,6 +52,9 @@ export function EditTeamMemberDialog({
   const [tokenBusy, setTokenBusy] = useState(false);
   const [plainToken, setPlainToken] = useState<string | null>(null);
   const [mobileTokens, setMobileTokens] = useState<MobileTokenRow[]>([]);
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [mfaMessage, setMfaMessage] = useState<string | null>(null);
+  const [mfaError, setMfaError] = useState<string | null>(null);
 
   const editPermission = getTeamMemberActionPermission({
     action: "edit",
@@ -61,6 +65,13 @@ export function EditTeamMemberDialog({
   });
   const canEditRoles = currentUserRole === "owner" && member.id !== currentUserId;
   const canToggleActive = currentUserRole === "owner" && member.id !== currentUserId;
+  const resetMfaPermission = getTeamMemberActionPermission({
+    action: "reset-mfa",
+    actorRole: currentUserRole,
+    actorUserId: currentUserId,
+    targetRole: member.role,
+    targetUserId: member.id,
+  });
   const roleOptions: UserRole[] = ALL_TEAM_ROLES;
 
   if (!editPermission.allowed) {
@@ -141,6 +152,28 @@ export function EditTeamMemberDialog({
     await reloadMobileTokens();
   }
 
+  async function handleResetMfa() {
+    const displayName = member.name ?? member.email ?? "this user";
+    const confirmed = window.confirm(
+      `This will disable 2FA for ${displayName}. They will be required to set it up again on their next login. Are you sure?`,
+    );
+    if (!confirmed) return;
+
+    setMfaError(null);
+    setMfaMessage(null);
+    setMfaBusy(true);
+    const { error } = await resetTeamMemberMfa(member.id);
+    setMfaBusy(false);
+    if (error) {
+      setMfaError(error);
+      return;
+    }
+
+    setMfaMessage(
+      `2FA has been reset. ${displayName} will be prompted to set it up again on next login.`,
+    );
+  }
+
   return (
     <>
       <button
@@ -148,6 +181,8 @@ export function EditTeamMemberDialog({
         onClick={() => {
           setOpen(true);
           setError(null);
+          setMfaMessage(null);
+          setMfaError(null);
         }}
         className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
       >
@@ -276,6 +311,37 @@ export function EditTeamMemberDialog({
                 <p className="text-xs text-slate-500">
                   Only owners can change active state here.
                 </p>
+              ) : null}
+
+              {resetMfaPermission.allowed ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Two-factor authentication</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Reset this user’s 2FA so they must set it up again on next login.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleResetMfa()}
+                      disabled={mfaBusy}
+                      className="rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {mfaBusy ? "Resetting…" : "Reset two-factor authentication"}
+                    </button>
+                  </div>
+                  {mfaMessage ? (
+                    <p className="mt-3 text-sm text-emerald-700" role="status">
+                      {mfaMessage}
+                    </p>
+                  ) : null}
+                  {mfaError ? (
+                    <p className="mt-3 text-sm text-red-600" role="alert">
+                      {mfaError}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
 
               {error ? (

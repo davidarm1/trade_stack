@@ -53,7 +53,7 @@ export async function proxy(request: NextRequest) {
 
   const { response, user, role, mfa } = await updateSession(request);
   const mandatoryMfa = role === "owner" || role === "office";
-  const needsMfaSetup = mandatoryMfa && !mfa.hasTotp;
+  const needsMfaSetup = !mfa.hasTotp;
   const needsMfaChallenge =
     mandatoryMfa && mfa.hasTotp && mfa.currentLevel !== "aal2";
 

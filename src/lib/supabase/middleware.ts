@@ -67,13 +67,13 @@ export async function updateSession(
       .maybeSingle();
     role = (profile?.role as UserRole | null) ?? null;
 
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    mfa.hasTotp = Boolean(factors?.totp.length);
+
     if (requiresMfa(role)) {
-      const [{ data: factors }, { data: assurance }] = await Promise.all([
-        supabase.auth.mfa.listFactors(),
-        supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
-      ]);
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       mfa = {
-        hasTotp: Boolean(factors?.totp.length),
+        hasTotp: mfa.hasTotp,
         currentLevel: assurance?.currentLevel ?? null,
         nextLevel: assurance?.nextLevel ?? null,
       };

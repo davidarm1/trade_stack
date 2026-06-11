@@ -83,6 +83,22 @@ async function requireTeamManagerAccess(): Promise<{
   };
 }
 
+async function requireTeamOwnerAccess(): Promise<{
+  ok: true;
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  actor: TeamActor;
+} | {
+  ok: false;
+  error: string;
+}> {
+  const access = await requireTeamManagerAccess();
+  if (!access.ok) return access;
+  if (access.actor.role !== "owner") {
+    return { ok: false, error: "Only owners can reset two-factor authentication." };
+  }
+  return access;
+}
+
 async function getTargetUserForTenant(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
@@ -404,6 +420,61 @@ export async function sendTeamMemberResetEmail(userId: string): Promise<TeamActi
 
   const result = await generateAndSendPasswordResetEmail(target.email);
   if (result.error) return { success: false, error: result.error };
+  return { success: true, error: null };
+}
+
+export async function resetTeamMemberMfa(userId: string): Promise<TeamActionResult> {
+  const access = await requireTeamOwnerAccess();
+  if (!access.ok) return { success: false, error: access.error };
+  const { supabase, actor } = access;
+
+  const target = await getTeamMemberForTenant(supabase, actor.tenantId, userId);
+  if (!target) {
+    return { success: false, error: "You are not allowed to manage that user." };
+  }
+
+  const permission = getTeamMemberActionPermission({
+    action: "reset-mfa",
+    actorRole: actor.role,
+    actorUserId: actor.userId,
+    targetRole: target.role,
+    targetUserId: target.id,
+  });
+  if (!permission.allowed) {
+    return { success: false, error: permission.reason };
+  }
+
+  let admin;
+  try {
+    admin = createServiceRoleClient();
+  } catch {
+    return {
+      success: false,
+      error:
+        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable 2FA resets.",
+    };
+  }
+
+  const { data, error } = await admin.auth.admin.mfa.listFactors({ userId });
+  if (error) return { success: false, error: error.message };
+
+  const factors = data?.factors ?? [];
+  if (factors.length === 0) {
+    return { success: false, error: "That user does not have any 2FA factors to reset." };
+  }
+
+  for (const factor of factors) {
+    const { error: deleteError } = await admin.auth.admin.mfa.deleteFactor({
+      userId,
+      id: factor.id,
+    });
+    if (deleteError) {
+      return { success: false, error: deleteError.message };
+    }
+  }
+
+  revalidatePath("/team");
+  revalidatePath("/", "layout");
   return { success: true, error: null };
 }
 

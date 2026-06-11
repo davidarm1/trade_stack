@@ -1,6 +1,11 @@
 import type { UserRole } from "@/types/database";
 
-export type TeamMemberAction = "edit" | "send-reset" | "deactivate" | "reactivate";
+export type TeamMemberAction =
+  | "edit"
+  | "send-reset"
+  | "deactivate"
+  | "reactivate"
+  | "reset-mfa";
 
 export type TeamMemberActionPermission = {
   allowed: boolean;
@@ -35,6 +40,16 @@ export function getTeamMemberActionPermission(args: {
       return {
         allowed: false,
         reason: "Only owners can deactivate or reactivate team members.",
+      };
+    }
+    return { allowed: true, reason: "" };
+  }
+
+  if (action === "reset-mfa") {
+    if (actorRole !== "owner") {
+      return {
+        allowed: false,
+        reason: "Only owners can reset two-factor authentication for team members.",
       };
     }
     return { allowed: true, reason: "" };
