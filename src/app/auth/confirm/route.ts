@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
+  appOrigin,
   normalizeAuthNextPath,
   type AuthLinkType,
 } from "@/lib/auth-links";
 
-function redirectTo(target: string, request: NextRequest) {
-  return NextResponse.redirect(new URL(target, request.url));
+function redirectTo(target: string) {
+  return NextResponse.redirect(new URL(target, appOrigin()));
 }
 
 export async function GET(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   const next = url.searchParams.get("next");
 
   if (!tokenHash || (type !== "invite" && type !== "recovery")) {
-    return redirectTo("/login?error=invalid_auth_link", request);
+    return redirectTo("/login?error=invalid_auth_link");
   }
 
   const supabase = await createClient();
@@ -28,12 +29,12 @@ export async function GET(request: NextRequest) {
   if (error) {
     const fallback = type === "recovery" ? "/forgot-password" : "/login";
     const message = encodeURIComponent(error.message || "invalid_auth_link");
-    return redirectTo(`${fallback}?error=${message}`, request);
+    return redirectTo(`${fallback}?error=${message}`);
   }
 
   const target = normalizeAuthNextPath(
     next,
     type === "recovery" ? "/auth/reset-password" : "/dashboard",
   );
-  return redirectTo(target, request);
+  return redirectTo(target);
 }

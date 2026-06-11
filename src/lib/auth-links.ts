@@ -2,9 +2,13 @@ export type AuthLinkType = "invite" | "recovery";
 
 export function appOrigin(): string {
   const explicit = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (explicit?.startsWith("http")) return explicit;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+  if (!explicit) {
+    throw new Error("Missing NEXT_PUBLIC_APP_URL");
+  }
+  if (!explicit.startsWith("http")) {
+    throw new Error("NEXT_PUBLIC_APP_URL must be an absolute http(s) URL");
+  }
+  return explicit;
 }
 
 export function normalizeAuthNextPath(
