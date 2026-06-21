@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const PENDING_PASSWORD_KEY = "tradestack.pendingResetPassword";
+
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
@@ -12,6 +14,7 @@ export default function ResetPasswordPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const timeoutRef = useRef<number | null>(null);
+  const autoResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -53,6 +56,54 @@ export default function ResetPasswordPage() {
     };
   }, []);
 
+  async function updatePassword(password: string) {
+    setPending(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password });
+
+      if (error) {
+        const message = error.message || "Could not update password.";
+        if (
+          /AAL2 session is required to update email or password when MFA is enabled/i.test(
+            message,
+          )
+        ) {
+          window.sessionStorage.setItem(PENDING_PASSWORD_KEY, password);
+          router.replace("/auth/mfa-challenge?next=/auth/reset-password");
+          router.refresh();
+          return;
+        }
+        window.sessionStorage.removeItem(PENDING_PASSWORD_KEY);
+        setFormError(message);
+        return;
+      }
+
+      window.sessionStorage.removeItem(PENDING_PASSWORD_KEY);
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not update password.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  useEffect(() => {
+    if (checking || !canReset || pending || autoResumeAttemptedRef.current) {
+      return;
+    }
+
+    const pendingPassword = window.sessionStorage.getItem(PENDING_PASSWORD_KEY);
+    if (!pendingPassword) {
+      return;
+    }
+
+    autoResumeAttemptedRef.current = true;
+    setFormError(null);
+    void updatePassword(pendingPassword);
+  }, [checking, canReset, pending]);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
@@ -68,33 +119,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    setPending(true);
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({ password });
-
-      if (error) {
-        const message = error.message || "Could not update password.";
-        if (
-          /AAL2 session is required to update email or password when MFA is enabled/i.test(
-            message,
-          )
-        ) {
-          router.replace("/auth/mfa-challenge?next=/auth/reset-password");
-          router.refresh();
-          return;
-        }
-        setFormError(message);
-        return;
-      }
-
-      router.replace("/dashboard");
-      router.refresh();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Could not update password.");
-    } finally {
-      setPending(false);
-    }
+    await updatePassword(password);
   }
 
   return (
@@ -119,6 +144,8 @@ export default function ResetPasswordPage() {
               Forgot password
             </Link>
           </div>
+        ) : pending ? (
+          <p className="mt-8 text-sm text-slate-600">Saving your new password…</p>
         ) : (
           <form
             method="post"
