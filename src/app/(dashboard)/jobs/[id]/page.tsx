@@ -9,6 +9,7 @@ import {
   formatJobRefFormal,
   jobInvoiceEmailSubject,
 } from "@/lib/job-number";
+import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 import { JobDetailActions } from "./job-detail-actions";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 
@@ -163,13 +164,11 @@ export default async function Page({
       ? formatCurrency(n, currencyCode)
       : "—";
   const locale = localeFromCurrency(currencyCode);
-  const completionSignatureUrl =
-    completion &&
-    typeof (completion as { client_signature_url?: unknown }).client_signature_url ===
-      "string"
-      ? String((completion as { client_signature_url?: string }).client_signature_url).trim()
-      : "";
-  const signatureUrl = String(j.signature_url ?? "").trim() || completionSignatureUrl;
+  const signatureUrl =
+    b2DownloadPathFromStoredValue(j.signature_url) ??
+    b2DownloadPathFromStoredValue(
+      (completion as { client_signature_url?: string | null } | null)?.client_signature_url ?? null,
+    );
 
   return (
     <div>
@@ -414,8 +413,8 @@ export default async function Page({
 
         <InvoicePreviewPanel
           jobId={j.id}
-          currentInvoiceUrl={currentInvoiceVersion?.public_url ?? null}
-          currentJobSheetUrl={j.jobsheet_url ?? null}
+          currentInvoiceUrl={b2DownloadPathFromStoredValue(currentInvoiceVersion?.public_url)}
+          currentJobSheetUrl={b2DownloadPathFromStoredValue(j.jobsheet_url)}
           invoiceVersions={invoiceVersions}
           initial={{
             custom_invoice_number: j.custom_invoice_number ?? null,
@@ -543,7 +542,7 @@ export default async function Page({
                       </div>
                       {receipt.receipt_url ? (
                         <a
-                          href={receipt.receipt_url}
+                          href={b2DownloadPathFromStoredValue(receipt.receipt_url) ?? "#"}
                           target="_blank"
                           rel="noreferrer"
                           className="font-medium text-slate-700 underline"

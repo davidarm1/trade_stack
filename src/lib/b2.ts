@@ -1,9 +1,13 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  type ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { normalizeB2ObjectKey } from "@/lib/b2-links";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -29,8 +33,7 @@ function getS3(): S3Client {
 }
 
 /**
- * Public URL for an object key. Set B2_PUBLIC_URL_BASE to the bucket root
- * (e.g. https://s3.us-west-004.backblazeb2.com/your-bucket-name).
+ * Public URL for an object key. Set B2_PUBLIC_URL_BASE to the bucket root.
  */
 export function publicUrlForB2Key(key: string): string {
   const path = key.split("/").map(encodeURIComponent).join("/");
@@ -79,9 +82,7 @@ export function b2KeyFromPublicUrl(publicUrl: string): string | null {
 
 /**
  * Derives the B2 object key for a receipt file from a stored public URL when
- * {@link b2KeyFromPublicUrl} fails (e.g. friendly `fxxx.backblazeb2.com/file/...` URLs,
- * CDN hostnames, or base URL drift vs upload time).
- *
+ * {@link b2KeyFromPublicUrl} fails for legacy URL shapes or base URL drift.
  * Upload keys are always `tradestack/{tenantUuid}/receipts/{sha}_receipt.{ext}`.
  */
 export function receiptB2KeyFromPublicUrl(publicUrl: string): string | null {
@@ -166,4 +167,64 @@ export async function presignB2PutObject(args: {
     }),
     { expiresIn: args.expiresInSeconds ?? 900 },
   );
+}
+
+export async function getSignedDownloadUrl(
+  key: string,
+  expiresInSeconds = 900,
+): Promise<string> {
+  const normalizedKey = normalizeB2ObjectKey(key);
+  if (!normalizedKey) {
+    throw new Error("Invalid B2 object key");
+  }
+
+  const client = getS3();
+  const bucket = requireEnv("B2_BUCKET_NAME");
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: normalizedKey,
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
+export type B2PrefixStats = {
+  objectCount: number;
+  totalBytes: number;
+};
+
+export async function getB2PrefixStats(prefix: string): Promise<B2PrefixStats> {
+  const client = getS3();
+  const bucket = requireEnv("B2_BUCKET_NAME");
+  const normalizedPrefix = String(prefix ?? "").trim();
+  if (!normalizedPrefix) {
+    throw new Error("prefix is required");
+  }
+
+  let continuationToken: string | undefined;
+  let totalBytes = 0;
+  let objectCount = 0;
+
+  do {
+    const response = (await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: normalizedPrefix,
+        ContinuationToken: continuationToken,
+      }),
+    )) as ListObjectsV2CommandOutput;
+
+    for (const item of response.Contents ?? []) {
+      if (typeof item.Size === "number" && Number.isFinite(item.Size)) {
+        totalBytes += item.Size;
+      }
+      objectCount += 1;
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken ?? undefined : undefined;
+  } while (continuationToken);
+
+  return { objectCount, totalBytes };
 }

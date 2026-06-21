@@ -113,7 +113,7 @@ export function UploadReceiptForm({
   async function finalizeViaDirectUploadMeta(
     requestId: number,
     formEl: HTMLFormElement | null,
-    meta: { key: string; publicUrl: string; fileName: string; fileType: string },
+    meta: { key: string; fileName: string; fileType: string },
   ) {
     const res = await fetch("/api/outgoings/scan-receipt", {
       method: "POST",
@@ -173,11 +173,10 @@ export function UploadReceiptForm({
       const presign = (await presignRes.json()) as {
         error?: string;
         key?: string;
-        publicUrl?: string;
         uploadUrl?: string;
         mimeType?: string;
       };
-      if (!presignRes.ok || !presign.uploadUrl || !presign.publicUrl || !presign.key) {
+      if (!presignRes.ok || !presign.uploadUrl || !presign.key) {
         if (requestId !== requestIdRef.current) return;
         setError(
           presign.error ?? `Could not start upload (${presignRes.status}).`,
@@ -200,7 +199,6 @@ export function UploadReceiptForm({
       }
       await finalizeViaDirectUploadMeta(requestId, formEl, {
         key: presign.key,
-        publicUrl: presign.publicUrl,
         fileName: file.name,
         fileType: file.type,
       });

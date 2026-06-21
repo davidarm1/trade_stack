@@ -4,6 +4,7 @@ import {
   rejectForeignTenantId,
 } from "@/lib/api-auth";
 import { uploadToB2 } from "@/lib/b2";
+import { b2DownloadPathForKey } from "@/lib/b2-links";
 
 export const runtime = "nodejs";
 
@@ -106,9 +107,8 @@ export async function POST(
     const fileName = body.fileName?.trim() || `field_${safeIndex}.${ext}`;
     const key = `tradestack/${tenantId}/job-photos/${jobId}/${Date.now()}_${safeIndex}.${ext}`;
 
-    let url: string;
     try {
-      url = await uploadToB2(buffer, key, mimeType);
+      await uploadToB2(buffer, key, mimeType);
     } catch (error) {
       logUploadPhotoError("b2-upload-failed", {
         jobId,
@@ -132,7 +132,7 @@ export async function POST(
       b2_key: key,
       file_name: fileName,
       file_size_bytes: buffer.length,
-      public_url: url,
+      public_url: key,
     });
 
     if (fileErr) {
@@ -144,13 +144,13 @@ export async function POST(
         assignedEngineerId: job.assigned_engineer_id,
         jobStatus: job.status,
         key,
-        url,
+        downloadUrl: b2DownloadPathForKey(key),
         error: fileErr,
       });
       return NextResponse.json({ error: fileErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, url, key });
+    return NextResponse.json({ success: true, url: b2DownloadPathForKey(key), key });
   } catch (error) {
     logUploadPhotoError("unhandled-error", { error });
     return NextResponse.json(

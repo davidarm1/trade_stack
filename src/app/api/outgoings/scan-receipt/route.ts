@@ -6,7 +6,8 @@ import { getSessionTenantOrError, rejectForeignTenantId } from "@/lib/api-auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { deleteFromB2ByKey, uploadToB2 } from "@/lib/b2";
+import { deleteFromB2ByKey, getSignedDownloadUrl, uploadToB2 } from "@/lib/b2";
+import { b2DownloadPathForKey, normalizeB2ObjectKey } from "@/lib/b2-links";
 import {
   baselineLineSumForReceipt,
   parseReceiptLineItems,
@@ -531,9 +532,8 @@ async function processReceiptUploadInBackground(args: {
     supa = await createClient();
   }
 
-  let url: string;
   try {
-    url = await uploadToB2(buf, key, mime);
+    await uploadToB2(buf, key, mime);
   } catch (e) {
     console.error("[scan-receipt] B2 upload failed:", e);
     return;
@@ -546,7 +546,7 @@ async function processReceiptUploadInBackground(args: {
     b2_key: key,
     file_name: displayFileName,
     file_size_bytes: buf.length,
-    public_url: url,
+    public_url: key,
   });
 
   if (fileErr) {
@@ -573,7 +573,7 @@ async function processReceiptUploadInBackground(args: {
       job_id: linkedContext.jobId,
       client_id: linkedContext.clientId,
       uploaded_by_id: userId,
-      receipt_url: url,
+      receipt_url: key,
       supplier_name: null,
       invoice_date: null,
       amount_total: null,
@@ -610,6 +610,8 @@ async function processReceiptUploadInBackground(args: {
     return;
   }
 
+  const downloadUrl = await getSignedDownloadUrl(key);
+
   await runReceiptOcrAfterUpload({
     supabase: supa,
     receiptId: receiptRow.id,
@@ -619,7 +621,7 @@ async function processReceiptUploadInBackground(args: {
     mime,
     fileName,
     isPdf,
-    url,
+    url: downloadUrl,
     requestedPaymentStatus,
   });
 }
@@ -661,7 +663,7 @@ async function processUploadedObjectInBackground(args: {
     b2_key: key,
     file_name: fileName,
     file_size_bytes: null,
-    public_url: url,
+    public_url: key,
   });
   if (fileErr) {
     console.error(
@@ -685,7 +687,7 @@ async function processUploadedObjectInBackground(args: {
       job_id: linkedContext.jobId,
       client_id: linkedContext.clientId,
       uploaded_by_id: userId,
-      receipt_url: url,
+      receipt_url: key,
       supplier_name: null,
       invoice_date: null,
       amount_total: null,
@@ -784,12 +786,11 @@ export async function POST(request: Request) {
     if (!linked.ok) return linked.response;
     linkedContext = linked.context;
     const requestedPaymentStatus = parseRequestedPaymentStatus(body?.payment_status);
-    const key = (body?.key || "").trim();
-    const publicUrl = (body?.publicUrl || "").trim();
+    const key = normalizeB2ObjectKey(body?.key) ?? normalizeB2ObjectKey(body?.publicUrl);
     const fileName = (body?.fileName || "receipt.pdf").trim();
     const mime =
       (body?.fileType || "").trim() || mimeForExt(extFromName(fileName));
-    if (!key || !publicUrl) {
+    if (!key) {
       return NextResponse.json(
         { error: "Missing upload metadata" },
         { status: 400 },
@@ -802,13 +803,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const signedUrl = await getSignedDownloadUrl(key);
+
     after(() => {
       void processUploadedObjectInBackground({
         tenantId: session.tenantId,
         userId: session.userId,
         linkedContext,
         key,
-        url: publicUrl,
+        url: signedUrl,
         mime,
         fileName,
         requestedPaymentStatus,
@@ -877,7 +880,7 @@ export async function POST(request: Request) {
 
   const { data: existingFile } = await supabase
     .from("tenant_files")
-    .select("id, public_url")
+    .select("id, b2_key, public_url")
     .eq("tenant_id", tenantId)
     .eq("b2_key", key)
     .is("deleted_at", null)
@@ -899,7 +902,7 @@ export async function POST(request: Request) {
         {
           error: "Duplicate file detected: this invoice was already uploaded.",
           duplicate: true,
-          receiptUrl: existingFile.public_url,
+          receiptUrl: b2DownloadPathForKey(existingFile.b2_key ?? key),
         },
         { status: 409 },
       );

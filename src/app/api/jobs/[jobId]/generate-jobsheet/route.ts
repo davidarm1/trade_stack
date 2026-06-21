@@ -4,7 +4,8 @@ import {
   getSessionTenantOrError,
   rejectForeignTenantId,
 } from "@/lib/api-auth";
-import { uploadToB2 } from "@/lib/b2";
+import { uploadToB2, getSignedDownloadUrl } from "@/lib/b2";
+import { normalizeB2ObjectKey } from "@/lib/b2-links";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import { formatJobRefFormal } from "@/lib/job-number";
@@ -77,11 +78,14 @@ async function embedRemoteImage(
   const src = String(url ?? "").trim();
   if (!src) return null;
   try {
-    const res = await fetch(src, { cache: "no-store" });
+    const signedSrc = normalizeB2ObjectKey(src)
+      ? await getSignedDownloadUrl(src)
+      : src;
+    const res = await fetch(signedSrc, { cache: "no-store" });
     if (!res.ok) return null;
     const bytes = new Uint8Array(await res.arrayBuffer());
     const ct = res.headers.get("content-type")?.toLowerCase() ?? "";
-    const lower = src.toLowerCase();
+    const lower = signedSrc.toLowerCase();
     const image =
       ct.includes("png") || lower.includes(".png")
         ? await pdf.embedPng(bytes)
@@ -602,7 +606,8 @@ export async function POST(
 
   const { buffer, fileName } = generated;
   const key = `tradestack/${tenantId}/jobsheets/${jobId}.pdf`;
-  const url = await uploadToB2(buffer, key, "application/pdf");
+  await uploadToB2(buffer, key, "application/pdf");
+  const downloadUrl = `/api/files/download?key=${encodeURIComponent(key)}`;
 
   const { error: fileErr } = await supabase.from("tenant_files").insert({
     tenant_id: tenantId,
@@ -611,18 +616,18 @@ export async function POST(
     b2_key: key,
     file_name: fileName,
     file_size_bytes: buffer.length,
-    public_url: url,
+    public_url: key,
   });
 
   if (fileErr) return NextResponse.json({ error: fileErr.message }, { status: 500 });
 
   const { error: updErr } = await supabase
     .from("jobs")
-    .update({ jobsheet_url: url, updated_at: new Date().toISOString() })
+    .update({ jobsheet_url: downloadUrl, updated_at: new Date().toISOString() })
     .eq("id", jobId)
     .eq("tenant_id", tenantId);
 
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
-  return NextResponse.json({ success: true, url });
+  return NextResponse.json({ success: true, url: downloadUrl });
 }

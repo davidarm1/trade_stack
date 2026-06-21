@@ -6,6 +6,7 @@ import {
   updateJobCompletionDetails,
   updateJobInvoiceDetails,
 } from "@/actions/jobs";
+import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 
 type MaterialRow = {
   description: string;
@@ -409,7 +410,7 @@ export function InvoicePreviewPanel({
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <a
-                    href={v.public_url}
+                    href={b2DownloadPathFromStoredValue(v.public_url) ?? "#"}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-50"
@@ -417,7 +418,7 @@ export function InvoicePreviewPanel({
                     View
                   </a>
                   <a
-                    href={v.public_url}
+                    href={b2DownloadPathFromStoredValue(v.public_url) ?? "#"}
                     download={v.file_name}
                     className="rounded border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-50"
                   >

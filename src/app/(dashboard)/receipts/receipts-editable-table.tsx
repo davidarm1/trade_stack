@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format-currency";
+import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 import { OutgoingsSummaryCards } from "./outgoings-summary-cards";
 import {
   baselineLineSumForReceipt,
@@ -942,7 +943,7 @@ export function ReceiptsEditableTable({
           <td className="px-4 py-3 text-slate-700">
             {r.receipt_url ? (
               <a
-                href={r.receipt_url}
+                href={b2DownloadPathFromStoredValue(r.receipt_url) ?? "#"}
                 target="_blank"
                 rel="noreferrer"
                 className="underline"

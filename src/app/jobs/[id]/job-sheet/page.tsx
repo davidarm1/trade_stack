@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { createClient } from "@/lib/supabase/server";
 import { formatJobRefFormal } from "@/lib/job-number";
+import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 import { JobSheetView } from "./job-sheet-view";
 
 function opt(value: unknown): string | null {
@@ -96,8 +97,10 @@ export default async function JobSheetStandalonePage({
     `JOB-${String(job.id).slice(0, 8)}`;
 
   const signatureUrl =
-    opt(job.signature_url) ??
-    opt((completion as { client_signature_url?: string | null } | null)?.client_signature_url);
+    b2DownloadPathFromStoredValue(job.signature_url) ??
+    b2DownloadPathFromStoredValue(
+      (completion as { client_signature_url?: string | null } | null)?.client_signature_url ?? null,
+    );
 
   const dateOnSite = job.date_onsite
     ? new Date(String(job.date_onsite)).toLocaleDateString("en-GB", {

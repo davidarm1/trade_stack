@@ -63,66 +63,100 @@ async function getVerifiedTotpFactor() {
 }
 
 export async function signIn(email: string, password: string) {
-  const audit = await requestAuditFields();
-  const normalizedEmail = email.trim().toLowerCase();
-  const rateLimitResult = await signInRateLimit.limit(audit.ip);
-  if (!rateLimitResult.success) {
+  try {
+    const startedAt = Date.now();
+    const mark = (step: string, extra?: Record<string, unknown>) => {
+      console.info("[auth] signIn step", {
+        step,
+        ms: Date.now() - startedAt,
+        ...(extra ?? {}),
+      });
+    };
+
+    const audit = await requestAuditFields();
+    mark("request-audit-fields");
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const rateLimitResult = await signInRateLimit.limit(audit.ip);
+    mark("rate-limit", { allowed: rateLimitResult.success });
+    if (!rateLimitResult.success) {
+      await logAuditEvent({
+        event: "login_failure",
+        ip: audit.ip,
+        user_agent: audit.user_agent,
+        metadata: { email: normalizedEmail, reason: "rate_limited" },
+      });
+      mark("audit-login-failure-rate-limited");
+      return {
+        data: null,
+        error: "Too many login attempts, please try again in 15 minutes.",
+      };
+    }
+
+    const supabase = await createClient();
+    mark("create-client");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    mark("sign-in-with-password", { success: !error, hasUser: Boolean(data.user) });
+    if (error) {
+      await logAuditEvent({
+        event: "login_failure",
+        ip: audit.ip,
+        user_agent: audit.user_agent,
+        metadata: { email: normalizedEmail, reason: error.message },
+      });
+      mark("audit-login-failure");
+      return { data: null, error: error.message };
+    }
+    if (!data.user) {
+      mark("missing-user");
+      return { data: null, error: "Could not sign in." };
+    }
+    const { data: profile } = await supabase
+      .from("users")
+      .select("tenant_id, role")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    mark("load-profile", { role: profile?.role ?? null });
+
     await logAuditEvent({
-      event: "login_failure",
+      event: "login_success",
+      tenant_id: profile?.tenant_id ?? null,
+      user_id: data.user.id,
       ip: audit.ip,
       user_agent: audit.user_agent,
-      metadata: { email: normalizedEmail, reason: "rate_limited" },
+      metadata: { email: normalizedEmail },
     });
+    mark("audit-login-success");
+
+    revalidatePath("/", "layout");
+    mark("revalidate-root-layout");
+
+    const role = (profile?.role as UserRole | null) ?? null;
+    if (!requiresMfa(role)) {
+      mark("redirect-dashboard");
+      return { data, error: null, redirectTo: "/dashboard" };
+    }
+
+    const { data: factors, error: factorsError } =
+      await supabase.auth.mfa.listFactors();
+    mark("list-factors", { success: !factorsError, totpCount: factors?.totp?.length ?? null });
+    if (factorsError) return { data: null, error: factorsError.message };
+
+    const redirectTo =
+      factors.totp.length > 0 ? "/mfa" : "/account/security?required=true";
+    mark("redirect-mfa", { redirectTo });
+    return { data, error: null, redirectTo };
+  } catch (cause) {
+    console.error("[auth] signIn failed unexpectedly", cause);
     return {
       data: null,
-      error: "Too many login attempts, please try again in 15 minutes.",
+      error: "Could not sign in. Please try again.",
     };
   }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) {
-    await logAuditEvent({
-      event: "login_failure",
-      ip: audit.ip,
-      user_agent: audit.user_agent,
-      metadata: { email: normalizedEmail, reason: error.message },
-    });
-    return { data: null, error: error.message };
-  }
-  if (!data.user) {
-    return { data: null, error: "Could not sign in." };
-  }
-  const { data: profile } = await supabase
-    .from("users")
-    .select("tenant_id, role")
-    .eq("id", data.user.id)
-    .maybeSingle();
-  await logAuditEvent({
-    event: "login_success",
-    tenant_id: profile?.tenant_id ?? null,
-    user_id: data.user.id,
-    ip: audit.ip,
-    user_agent: audit.user_agent,
-    metadata: { email: normalizedEmail },
-  });
-  revalidatePath("/", "layout");
-
-  const role = (profile?.role as UserRole | null) ?? null;
-  if (!requiresMfa(role)) {
-    return { data, error: null, redirectTo: "/dashboard" };
-  }
-
-  const { data: factors, error: factorsError } =
-    await supabase.auth.mfa.listFactors();
-  if (factorsError) return { data: null, error: factorsError.message };
-
-  const redirectTo =
-    factors.totp.length > 0 ? "/mfa" : "/account/security?required=true";
-  return { data, error: null, redirectTo };
 }
 
 export async function getMfaStatus() {

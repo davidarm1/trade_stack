@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionTenantOrError, rejectForeignTenantId } from "@/lib/api-auth";
-import { presignB2PutObject, publicUrlForB2Key } from "@/lib/b2";
+import { b2DownloadPathForKey, normalizeB2ObjectKey } from "@/lib/b2-links";
+import { presignB2PutObject } from "@/lib/b2";
 
 export const runtime = "nodejs";
 
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
 
   const { data: existingFile } = await session.supabase
     .from("tenant_files")
-    .select("id, public_url")
+    .select("id, b2_key, public_url")
     .eq("tenant_id", session.tenantId)
     .eq("b2_key", key)
     .is("deleted_at", null)
@@ -176,7 +177,8 @@ export async function POST(request: Request) {
       .from("receipts")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.tenantId)
-      .eq("receipt_url", existingFile.public_url);
+      .eq("receipt_url", existingFile.b2_key ?? normalizeB2ObjectKey(existingFile.public_url));
+
     if (countErr) {
       return NextResponse.json({ error: countErr.message }, { status: 500 });
     }
@@ -185,7 +187,7 @@ export async function POST(request: Request) {
         {
           error: "Duplicate file detected: this invoice was already uploaded.",
           duplicate: true,
-          receiptUrl: existingFile.public_url,
+          receiptUrl: b2DownloadPathForKey(key),
         },
         { status: 409 },
       );
@@ -210,6 +212,5 @@ export async function POST(request: Request) {
     key,
     mimeType: mime,
     uploadUrl,
-    publicUrl: publicUrlForB2Key(key),
   });
 }

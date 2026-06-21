@@ -4,6 +4,7 @@ import {
   rejectForeignTenantId,
 } from "@/lib/api-auth";
 import { uploadToB2 } from "@/lib/b2";
+import { b2DownloadPathForKey } from "@/lib/b2-links";
 
 export const runtime = "nodejs";
 
@@ -122,7 +123,7 @@ export async function POST(
       b2_key: key,
       file_name: `${jobId}_signature.png`,
       file_size_bytes: buffer.length,
-      public_url: url,
+      public_url: key,
     });
 
     if (fileErr) {
@@ -143,7 +144,7 @@ export async function POST(
     const { error: updErr } = await supabase
       .from("jobs")
       .update({
-        signature_url: url,
+        signature_url: key,
         signed_at: signedAt,
         updated_at: signedAt,
       })
@@ -162,7 +163,7 @@ export async function POST(
       return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, url });
+    return NextResponse.json({ success: true, url: b2DownloadPathForKey(key) });
   } catch (error) {
     logSaveSignatureError("unhandled-error", { error });
     return NextResponse.json(

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { updatePassword } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
@@ -68,23 +67,34 @@ export default function ResetPasswordPage() {
       setFormError("Passwords do not match.");
       return;
     }
+
     setPending(true);
-    const result = await updatePassword(password);
-    setPending(false);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password });
 
-    if (result.redirectTo) {
-      router.push(result.redirectTo);
+      if (error) {
+        const message = error.message || "Could not update password.";
+        if (
+          /AAL2 session is required to update email or password when MFA is enabled/i.test(
+            message,
+          )
+        ) {
+          router.replace("/auth/mfa-challenge?next=/auth/reset-password");
+          router.refresh();
+          return;
+        }
+        setFormError(message);
+        return;
+      }
+
+      router.replace("/dashboard");
       router.refresh();
-      return;
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not update password.");
+    } finally {
+      setPending(false);
     }
-
-    if (result.error) {
-      setFormError(result.error);
-      return;
-    }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (

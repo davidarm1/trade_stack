@@ -6,6 +6,7 @@ import { jobMatchesSearch } from "@/lib/job-number";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
 import { uploadToB2 } from "@/lib/b2";
+import { b2DownloadPathForKey } from "@/lib/b2-links";
 import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
 import { sendInvoiceEmail } from "@/lib/resend";
 import type { Job } from "@/types/database";
@@ -22,6 +23,7 @@ type JobInvoiceVersion = {
   reason: string | null;
   file_name: string;
   public_url: string;
+  b2_key?: string | null;
   is_current: boolean;
   created_at: string;
 };
@@ -351,7 +353,7 @@ export async function getJobInvoiceVersions(jobId: string): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("job_invoice_versions")
-    .select("id, version_no, reason, file_name, public_url, is_current, created_at")
+    .select("id, version_no, reason, file_name, b2_key, public_url, is_current, created_at")
     .eq("tenant_id", ctx.tenantId)
     .eq("job_id", jobId)
     .order("version_no", { ascending: false });
@@ -418,7 +420,8 @@ export async function sendJobInvoice(
     versionNo: nextVersion,
   });
   const key = `tradestack/${ctx.tenantId}/invoices/${jobId}/v${nextVersion}_${fileName}`;
-  const url = await uploadToB2(buffer, key, "application/pdf");
+  await uploadToB2(buffer, key, "application/pdf");
+  const downloadUrl = b2DownloadPathForKey(key);
 
   const now = new Date().toISOString();
 
@@ -437,7 +440,7 @@ export async function sendJobInvoice(
     reason: trimmedReason || null,
     file_name: fileName,
     b2_key: key,
-    public_url: url,
+    public_url: key,
     is_current: true,
     created_by_id: ctx.userId,
     created_at: now,
@@ -451,7 +454,7 @@ export async function sendJobInvoice(
     b2_key: key,
     file_name: fileName,
     file_size_bytes: buffer.length,
-    public_url: url,
+    public_url: key,
   });
   if (fileErr) return { data: null, error: fileErr.message };
 
@@ -464,7 +467,7 @@ export async function sendJobInvoice(
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
       <p>Hello,</p>
       <p>Please find your invoice attached via secure link:</p>
-      <p><a href="${url}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
+      <p><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
       ${reasonText}
       <p>If you have any questions, please reply to this email.</p>
     </div>
@@ -473,7 +476,7 @@ export async function sendJobInvoice(
     "Hello,",
     "",
     "Please find your invoice at the link below:",
-    url,
+    downloadUrl,
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
     "If you have any questions, please reply to this email.",
@@ -510,7 +513,7 @@ export async function sendJobInvoice(
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}/invoice`);
-  return { data: { version_no: nextVersion, public_url: url }, error: null };
+  return { data: { version_no: nextVersion, public_url: downloadUrl }, error: null };
 }
 
 export async function deleteJob(id: string) {

@@ -20,12 +20,23 @@ function LoginForm() {
     const form = new FormData(e.currentTarget);
     const email = String(form.get("email") ?? "");
     const password = String(form.get("password") ?? "");
-    const { error: err, redirectTo } = await signIn(email, password);
-    setPending(false);
+
+    let redirectTo: string | undefined;
+    let err: string | null = null;
+
+    try {
+      ({ error: err, redirectTo } = await signIn(email, password));
+    } catch (cause) {
+      err = cause instanceof Error ? cause.message : "Could not sign in.";
+    } finally {
+      setPending(false);
+    }
+
     if (err) {
       setError(err);
       return;
     }
+
     if (
       redirectTo === "/mfa" ||
       redirectTo === "/account/security?required=true"
