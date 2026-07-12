@@ -197,6 +197,20 @@ function formatAmtField(n: number | null | undefined): string {
   return "";
 }
 
+/** Matches a receipt against a free-text search of supplier name or amount. */
+function receiptMatchesSearch(r: ReceiptRow, term: string): boolean {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+  if ((r.supplier_name ?? "").toLowerCase().includes(q)) return true;
+  const numericQ = q.replace(/[^0-9.]/g, "");
+  if (numericQ) {
+    for (const a of [r.amount_total, r.amount_net, r.amount_tax]) {
+      if (a != null && String(a).includes(numericQ)) return true;
+    }
+  }
+  return false;
+}
+
 function fmtDDMMYYYY(v: string | null | undefined): string {
   if (!v) return "";
   const d = new Date(v);
@@ -345,6 +359,7 @@ export function ReceiptsEditableTable({
   const [customRange, setCustomRange] = useState(false);
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
+  const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -603,7 +618,17 @@ export function ReceiptsEditableTable({
     return { inPeriod: inPeriodRows, overduePrior: overduePriorRows };
   }, [rows, customRange, rangeFrom, rangeTo, selectedMonth]);
 
-  const filteredRows = [...overduePrior, ...inPeriod];
+  // Search runs across ALL outgoings (ignores the period filter) so a receipt
+  // can be found without first navigating to the right month.
+  const searchActive = search.trim() !== "";
+  const searchResults = useMemo(
+    () => (searchActive ? rows.filter((r) => receiptMatchesSearch(r, search)) : []),
+    [rows, search, searchActive],
+  );
+
+  const periodRows = [...overduePrior, ...inPeriod];
+  // Rows used for the summary cards and the table body.
+  const filteredRows = searchActive ? searchResults : periodRows;
 
   const hasLines = draftLineItems.length > 0;
 
@@ -1156,6 +1181,39 @@ export function ReceiptsEditableTable({
           Custom Range
         </button>
 
+        <div className="relative">
+          <svg
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9 3.5a5.5 5.5 0 1 0 3.5 9.74l3.63 3.63a.75.75 0 1 0 1.06-1.06l-3.63-3.63A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search supplier or amount"
+            aria-label="Search outgoings by supplier or amount"
+            className="w-56 rounded border border-slate-300 py-1.5 pl-8 pr-8 text-sm text-slate-700 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          />
+          {searchActive && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
         <div ref={exportRef} className="relative ml-auto">
           <button
             type="button"
@@ -1217,9 +1275,13 @@ export function ReceiptsEditableTable({
             {filteredRows.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
-                  No outgoings for this period.
+                  {searchActive
+                    ? "No outgoings match your search."
+                    : "No outgoings for this period."}
                 </td>
               </tr>
+            ) : searchActive ? (
+              searchResults.map((r) => renderRow(r))
             ) : (
               <>
                 {overduePrior.length > 0 && (
