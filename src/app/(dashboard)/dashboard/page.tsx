@@ -556,10 +556,15 @@ export default async function DashboardPage({
           <div className="my-4 border-t border-slate-100" />
           <FinancialSummaryRow label="Net Profit" value={metrics.netProfit} currencyCode={currencyCode} tone={metrics.netProfit >= 0 ? "positive" : "negative"} large />
           <FinancialSummaryRow label="Tax Reserve" value={metrics.taxReserve} currencyCode={currencyCode} tone="reserve" />
-          <FinancialSummaryRow label="VAT Estimate" value={metrics.vatLiabilityEstimate} currencyCode={currencyCode} tone="reserve" showSign={false} />
+          {metrics.vatRegistered ? (
+            <FinancialSummaryRow label="VAT Estimate" value={metrics.vatLiabilityEstimate} currencyCode={currencyCode} tone="reserve" showSign={false} />
+          ) : null}
           <FinancialSummaryRow label="Spendable This Month" value={metrics.spendableThisMonth} currencyCode={currencyCode} tone={metrics.spendableThisMonth >= 0 ? "positive" : "negative"} large />
           <p className="mt-3 text-xs text-slate-400">
-            Tax reserve is 20% of invoices raised this month (accrual basis). VAT estimate is invoice VAT minus VAT on recorded outgoings for the selected month.
+            Tax reserve is 20% of invoices raised this month (accrual basis).
+            {metrics.vatRegistered
+              ? " VAT estimate is invoice VAT minus VAT on recorded outgoings for the selected month."
+              : ""}
           </p>
         </div>
       </section>

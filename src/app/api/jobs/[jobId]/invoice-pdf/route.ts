@@ -4,6 +4,7 @@ import { getSessionTenantOrError } from "@/lib/api-auth";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import { formatJobRefFormal } from "@/lib/job-number";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 
 export const runtime = "nodejs";
 
@@ -102,21 +103,29 @@ export async function GET(
 
   const [{ data: tenant }, { data: settingRows }, { data: client }, { data: materials }] =
     await Promise.all([
-      supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle(),
+      supabase.from("tenants").select("*").eq("id", job.tenant_id).maybeSingle(),
       supabase
         .from("settings")
         .select("field_key, field_value")
-        .eq("tenant_id", tenantId),
+        .eq("tenant_id", job.tenant_id),
       job.client_id
-        ? supabase.from("clients").select("*").eq("id", job.client_id).maybeSingle()
+        ? supabase
+            .from("clients")
+            .select("*")
+            .eq("id", job.client_id)
+            .eq("tenant_id", job.tenant_id)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
       supabase
         .from("job_materials")
         .select("*")
         .eq("job_id", jobId)
-        .eq("tenant_id", tenantId)
+        .eq("tenant_id", job.tenant_id)
         .order("sort_order", { ascending: true }),
     ]);
+  if (!tenant) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+  }
 
   const settings = Object.fromEntries(
     (settingRows ?? []).map((r) => [String(r.field_key), String(r.field_value ?? "")]),
@@ -157,11 +166,9 @@ export async function GET(
     formatJobRefFormal(job.job_number as number | null | undefined) ||
     `JOB-${String(job.id).slice(0, 8)}`;
   const invoiceNumber = text(job.custom_invoice_number ?? `${jobRef}-INV`);
-  const vatRate = toNumber(job.vat_rate ?? settings.default_vat_rate, 0);
-
   const subtotal = toNumber(job.subtotal, 0);
-  const vatAmount = toNumber(job.vat_amount, 0);
-  const total = toNumber(job.total_inc_vat, subtotal + vatAmount);
+  const effectiveVat = resolveEffectiveVat({ tenant, client, job, subtotal });
+  const total = effectiveVat.totalIncVat;
 
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]); // A4
@@ -449,12 +456,15 @@ export async function GET(
   y -= 26;
   const totalsValueRight = width - margin;
   const totalsLabelRight = totalsValueRight - 120;
-  const vatLabel = `VAT (${vatRate.toFixed(2).replace(/\.00$/, "")}%)`;
-  for (const [label, value, isTotal] of [
+  const vatLabel = `VAT (${effectiveVat.rate.toFixed(2).replace(/\.00$/, "")}%)`;
+  const totalsRows: Array<[string, string, boolean]> = [
     ["Subtotal", asMoney(subtotal, currencyCode), false],
-    [vatLabel, asMoney(vatAmount, currencyCode), false],
-    ["Total", asMoney(total, currencyCode), true],
-  ] as const) {
+  ];
+  if (effectiveVat.showVat) {
+    totalsRows.push([vatLabel, asMoney(effectiveVat.vatAmount, currencyCode), false]);
+  }
+  totalsRows.push(["Total", asMoney(total, currencyCode), true]);
+  for (const [label, value, isTotal] of totalsRows) {
     const size = isTotal ? 13 : 10;
     const valueColor = isTotal ? ORANGE : TEXT;
     const labelColor = isTotal ? NAVY : TEXT;
@@ -489,7 +499,7 @@ export async function GET(
   });
   page.drawText(
     `${companyName ? `${companyName} • ` : ""}Payment terms: ${termsDays} days${
-      tenant?.vat_number ? ` • VAT No: ${tenant.vat_number}` : ""
+      effectiveVat.showVat && tenant.vat_number ? ` • VAT No: ${tenant.vat_number}` : ""
     }`,
     { x: margin, y: footerY + 4, size: 8.5, font, color: TEXT },
   );

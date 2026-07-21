@@ -14,9 +14,24 @@ export async function createClient(data: ClientInsert) {
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createSupabaseServerClient();
 
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("id, vat_registered")
+    .eq("id", ctx.tenantId)
+    .maybeSingle();
+  if (tenantError || !tenant) {
+    return { data: null, error: tenantError?.message ?? "Tenant not found" };
+  }
+
   const { data: row, error } = await supabase
     .from("clients")
-    .insert({ ...data, tenant_id: ctx.tenantId })
+    .insert({
+      ...data,
+      default_vat_exempt: tenant.vat_registered
+        ? Boolean(data.default_vat_exempt)
+        : false,
+      tenant_id: ctx.tenantId,
+    })
     .select()
     .single();
 

@@ -12,6 +12,7 @@ import { sendInvoiceEmail } from "@/lib/resend";
 import type { Job } from "@/types/database";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
 import { logAuditEvent } from "@/lib/audit";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 
 type JobInsert = Partial<
   Omit<Job, "id" | "tenant_id" | "created_at" | "updated_at">
@@ -71,6 +72,35 @@ export async function createJob(data: JobInsert) {
     };
   }
 
+  const [{ data: tenant, error: tenantError }, { data: client, error: clientError }] =
+    await Promise.all([
+      supabase
+        .from("tenants")
+        .select("id, vat_registered, default_vat_rate")
+        .eq("id", ctx.tenantId)
+        .maybeSingle(),
+      supabase
+        .from("clients")
+        .select("id, default_vat_exempt")
+        .eq("id", rest.client_id)
+        .eq("tenant_id", ctx.tenantId)
+        .maybeSingle(),
+    ]);
+
+  if (tenantError || !tenant) {
+    return { data: null, error: tenantError?.message ?? "Tenant not found" };
+  }
+  if (clientError || !client) {
+    return { data: null, error: clientError?.message ?? "Client not found" };
+  }
+
+  const vatSeed = tenant.vat_registered
+    ? {
+        vat_rate: tenant.default_vat_rate ?? 0,
+        remove_vat: Boolean(client.default_vat_exempt),
+      }
+    : { vat_rate: 0, remove_vat: true };
+
   const { jobNumber, error: allocErr } = await allocateNextJobNumber();
   if (allocErr || jobNumber == null) {
     return { data: null, error: allocErr ?? "Could not allocate job number" };
@@ -83,11 +113,17 @@ export async function createJob(data: JobInsert) {
       tenant_id: ctx.tenantId,
       created_by_id: ctx.userId,
       job_number: jobNumber,
+      ...vatSeed,
     })
     .select()
     .single();
 
   if (error) return { data: null, error: error.message };
+  await recalcAndPersistJobTotals({
+    supabase,
+    tenantId: row.tenant_id,
+    jobId: row.id,
+  });
   revalidatePath("/jobs");
   return { data: row, error: null };
 }
@@ -115,6 +151,15 @@ export async function updateJob(id: string, data: JobInsert) {
     .single();
 
   if (error) return { data: null, error: error.message };
+  if ("labour_charge" in safe || "vat_rate" in safe || "remove_vat" in safe) {
+    await recalcAndPersistJobTotals({
+      supabase,
+      tenantId: row.tenant_id,
+      jobId: row.id,
+      labourChargeOverride:
+        "labour_charge" in safe ? safe.labour_charge ?? null : undefined,
+    });
+  }
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${id}`);
   return { data: row, error: null };
@@ -144,11 +189,18 @@ async function recalcAndPersistJobTotals(args: {
   const { supabase, tenantId, jobId, labourChargeOverride } = args;
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, labour_charge, vat_rate, remove_vat")
+    .select("id, tenant_id, client_id, labour_charge, vat_rate, remove_vat")
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!job) return;
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, vat_registered, default_vat_rate")
+    .eq("id", job.tenant_id)
+    .maybeSingle();
+  if (!tenant) return;
 
   const { data: materials } = await supabase
     .from("job_materials")
@@ -166,17 +218,17 @@ async function recalcAndPersistJobTotals(args: {
     labourChargeOverride == null ? finiteOrZero(job.labour_charge) : finiteOrZero(labourChargeOverride),
   );
   const subtotal = round2(labour + totalMaterials);
-  const vatRate = job.remove_vat ? 0 : finiteOrZero(job.vat_rate);
-  const vatAmount = round2(subtotal * (vatRate / 100));
-  const totalIncVat = round2(subtotal + vatAmount);
+  const vat = resolveEffectiveVat({ tenant, job, subtotal });
 
   await supabase
     .from("jobs")
     .update({
       total_materials: totalMaterials,
       subtotal,
-      vat_amount: vatAmount,
-      total_inc_vat: totalIncVat,
+      vat_rate: vat.rate,
+      remove_vat: vat.removeVat,
+      vat_amount: vat.vatAmount,
+      total_inc_vat: vat.totalIncVat,
       updated_at: new Date().toISOString(),
     })
     .eq("id", jobId)
@@ -673,13 +725,20 @@ export const getJob = cache(async function getJob(id: string) {
   if (jobError) return { data: null, error: jobError.message };
   if (!job) return { data: null, error: "Job not found" };
 
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, vat_registered, default_vat_rate")
+    .eq("id", job.tenant_id)
+    .maybeSingle();
+  if (!tenant) return { data: null, error: "Tenant not found" };
+
   let clientRow: Record<string, unknown> | null = null;
   if (job.client_id) {
     const { data: c } = await supabase
       .from("clients")
       .select("*")
       .eq("id", job.client_id)
-      .eq("tenant_id", ctx.tenantId)
+      .eq("tenant_id", job.tenant_id)
       .maybeSingle();
     clientRow = c;
   }
@@ -727,6 +786,7 @@ export const getJob = cache(async function getJob(id: string) {
   return {
     data: {
       job: { ...job, engineer, clients: clientRow },
+      tenant,
       materials: materials ?? [],
       completion,
       images: images ?? [],

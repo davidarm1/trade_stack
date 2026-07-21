@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/actions/clients";
 
-export function NewClientForm() {
+export function NewClientForm({ vatRegistered }: { vatRegistered: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -31,7 +31,8 @@ export function NewClientForm() {
       payment_terms_days: form.get("payment_terms_days")
         ? Number(form.get("payment_terms_days"))
         : null,
-      default_vat_exempt: form.get("default_vat_exempt") === "on",
+      default_vat_exempt:
+        vatRegistered && form.get("default_vat_exempt") === "on",
       notes: String(form.get("notes") ?? "") || null,
       is_active: true,
     });
@@ -172,20 +173,22 @@ export function NewClientForm() {
           />
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <input
-          id="default_vat_exempt"
-          name="default_vat_exempt"
-          type="checkbox"
-          className="rounded border-slate-300"
-        />
-        <label
-          htmlFor="default_vat_exempt"
-          className="text-sm text-slate-700"
-        >
-          Default VAT exempt
-        </label>
-      </div>
+      {vatRegistered ? (
+        <div className="flex items-center gap-2">
+          <input
+            id="default_vat_exempt"
+            name="default_vat_exempt"
+            type="checkbox"
+            className="rounded border-slate-300"
+          />
+          <label
+            htmlFor="default_vat_exempt"
+            className="text-sm text-slate-700"
+          >
+            Default VAT exempt
+          </label>
+        </div>
+      ) : null}
       <div>
         <label className="block text-sm font-medium text-slate-700">Notes</label>
         <textarea

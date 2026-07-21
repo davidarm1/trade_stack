@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
 import type { Tenant } from "@/types/database";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 
 type TenantUpdate = Partial<
   Omit<Tenant, "id" | "created_at" | "updated_at" | "slug">
@@ -44,16 +45,53 @@ export async function updateSettings(data: TenantUpdate) {
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
+  const normalized =
+    data.vat_registered === false
+      ? { ...data, vat_number: null, default_vat_rate: null }
+      : data;
+
   const { data: row, error } = await supabase
     .from("tenants")
-    .update({ ...data, updated_at: new Date().toISOString() })
+    .update({ ...normalized, updated_at: new Date().toISOString() })
     .eq("id", ctx.tenantId)
     .select()
     .single();
 
   if (error) return { data: null, error: error.message };
+  if (!row.vat_registered) {
+    const { data: jobs, error: jobsError } = await supabase
+      .from("jobs")
+      .select("id, tenant_id, subtotal, vat_rate, remove_vat")
+      .eq("tenant_id", row.id)
+      .is("deleted_at", null);
+    if (jobsError) return { data: null, error: jobsError.message };
+
+    const results = await Promise.all(
+      (jobs ?? []).map((job) => {
+        const vat = resolveEffectiveVat({
+          tenant: row,
+          job,
+          subtotal: Number(job.subtotal ?? 0),
+        });
+        return supabase
+          .from("jobs")
+          .update({
+            vat_rate: vat.rate,
+            remove_vat: vat.removeVat,
+            vat_amount: vat.vatAmount,
+            total_inc_vat: vat.totalIncVat,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id)
+          .eq("tenant_id", job.tenant_id);
+      }),
+    );
+    const jobsUpdateError = results.find((result) => result.error)?.error;
+    if (jobsUpdateError) return { data: null, error: jobsUpdateError.message };
+  }
   revalidatePath("/settings");
   revalidatePath("/receipts");
+  revalidatePath("/jobs");
   revalidatePath("/", "layout");
   return { data: row, error: null };
 }

@@ -10,6 +10,7 @@ export interface Tenant {
   name: string;
   slug: string;
   plan: string | null;
+  vat_registered: boolean;
   vat_number: string | null;
   company_reg_number: string | null;
   address1: string | null;

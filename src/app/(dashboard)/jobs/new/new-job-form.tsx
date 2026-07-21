@@ -43,9 +43,11 @@ function matchEngineerId(
 
 export function NewJobForm({
   engineers,
+  vatRegistered,
   prefill = null,
 }: {
   engineers: UserOpt[];
+  vatRegistered: boolean;
   prefill?: JobAiPrefill | null;
 }) {
   const router = useRouter();
@@ -194,7 +196,8 @@ export function NewJobForm({
         payment_terms_days: form.get("new_payment_terms_days")
           ? Number(form.get("new_payment_terms_days"))
           : null,
-        default_vat_exempt: form.get("new_default_vat_exempt") === "on",
+        default_vat_exempt:
+          vatRegistered && form.get("new_default_vat_exempt") === "on",
         notes: String(form.get("new_notes") ?? "").trim() || null,
         is_active: true,
       });
@@ -510,20 +513,22 @@ export function NewJobForm({
               />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              id="new_default_vat_exempt"
-              name="new_default_vat_exempt"
-              type="checkbox"
-              className="rounded border-slate-300"
-            />
-            <label
-              htmlFor="new_default_vat_exempt"
-              className="text-sm text-slate-700"
-            >
-              Default VAT exempt
-            </label>
-          </div>
+          {vatRegistered ? (
+            <div className="flex items-center gap-2">
+              <input
+                id="new_default_vat_exempt"
+                name="new_default_vat_exempt"
+                type="checkbox"
+                className="rounded border-slate-300"
+              />
+              <label
+                htmlFor="new_default_vat_exempt"
+                className="text-sm text-slate-700"
+              >
+                Default VAT exempt
+              </label>
+            </div>
+          ) : null}
           <div>
             <label className="block text-sm font-medium text-slate-700">
               Notes

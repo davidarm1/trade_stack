@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { getSettings } from "@/actions/settings";
 import { NewClientForm } from "./new-client-form";
 
-export default function NewClientPage() {
+export default async function NewClientPage() {
+  const { data } = await getSettings();
+
   return (
     <div>
       <Link
@@ -14,7 +17,7 @@ export default function NewClientPage() {
       <p className="mt-1 text-sm text-slate-600">
         Add a company and default contact details.
       </p>
-      <NewClientForm />
+      <NewClientForm vatRegistered={Boolean(data?.tenant?.vat_registered)} />
     </div>
   );
 }

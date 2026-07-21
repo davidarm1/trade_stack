@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { getTeamMembers } from "@/actions/team";
+import { getSettings } from "@/actions/settings";
 import { NewJobEntry } from "./new-job-entry";
 
 export default async function NewJobPage() {
-  const teamRes = await getTeamMembers();
+  const [teamRes, settingsRes] = await Promise.all([
+    getTeamMembers(),
+    getSettings(),
+  ]);
 
   if (teamRes.error) {
     return (
@@ -34,7 +38,10 @@ export default async function NewJobPage() {
         Add a job for a client — enter details yourself, or paste a client message
         to parse with OpenAI (set OPENAI_API_KEY for the app server).
       </p>
-      <NewJobEntry engineers={engineers} />
+      <NewJobEntry
+        engineers={engineers}
+        vatRegistered={Boolean(settingsRes.data?.tenant?.vat_registered)}
+      />
     </div>
   );
 }

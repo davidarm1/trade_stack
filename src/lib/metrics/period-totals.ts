@@ -65,7 +65,10 @@ type ComputedMetrics = {
   overdueEscalated: { count: number; value: number };
 };
 
-export type PeriodMetrics = ComputedMetrics & { currencyCode: string | null };
+export type PeriodMetrics = ComputedMetrics & {
+  currencyCode: string | null;
+  vatRegistered: boolean;
+};
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -217,6 +220,7 @@ export type ComputeInput = {
   receiptsTotal: number;
   wagesPaid: number;
   receiptsVatTotal: number;
+  vatRegistered: boolean;
   quotesRows: QuoteRow[];
   followups: FollowupRow[];
   year: number;
@@ -229,6 +233,7 @@ export function computePeriodMetrics({
   receiptsTotal,
   wagesPaid,
   receiptsVatTotal,
+  vatRegistered,
   quotesRows,
   followups,
   year,
@@ -286,7 +291,9 @@ export function computePeriodMetrics({
     (s, j) => s + Number(j.vat_amount ?? 0),
     0,
   );
-  const vatLiabilityEstimate = vatOnInvoicesThisMonth - receiptsVatTotal;
+  const vatLiabilityEstimate = vatRegistered
+    ? vatOnInvoicesThisMonth - receiptsVatTotal
+    : 0;
 
   const quotesAwaitingResponseRows = quotesRows.filter((q) => {
     const status = quoteStatus(q);
@@ -473,7 +480,11 @@ export async function getPeriodMetrics(
       .from("job_latest_followup")
       .select("job_id, status, next_action_date")
       .eq("tenant_id", tenantId),
-    supabase.from("tenants").select("currency").eq("id", tenantId).maybeSingle(),
+    supabase
+      .from("tenants")
+      .select("currency, vat_registered")
+      .eq("id", tenantId)
+      .maybeSingle(),
   ]);
 
   const jobs = (jobsRes.data ?? []) as JobRow[];
@@ -492,9 +503,22 @@ export async function getPeriodMetrics(
   const quotesRows = (quotesRes.data ?? []) as QuoteRow[];
   const followups = (followupsRes.data ?? []) as FollowupRow[];
   const currencyCode = (tenantRes.data?.currency as string | null) ?? null;
+  const vatRegistered = Boolean(tenantRes.data?.vat_registered);
 
   return {
     currencyCode,
-    ...computePeriodMetrics({ jobs, receiptsTotal, receiptsVatTotal, wagesPaid, quotesRows, followups, year, month, now }),
+    vatRegistered,
+    ...computePeriodMetrics({
+      jobs,
+      receiptsTotal,
+      receiptsVatTotal,
+      vatRegistered,
+      wagesPaid,
+      quotesRows,
+      followups,
+      year,
+      month,
+      now,
+    }),
   };
 }

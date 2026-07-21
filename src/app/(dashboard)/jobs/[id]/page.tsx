@@ -10,6 +10,7 @@ import {
   jobInvoiceEmailSubject,
 } from "@/lib/job-number";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 import { JobDetailActions } from "./job-detail-actions";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 
@@ -84,7 +85,7 @@ export default async function Page({
   }
 
   const currencyCode = await getTenantCurrencyCode();
-  const { job, materials, completion, images, receipts } = data;
+  const { job, tenant, materials, completion, images, receipts } = data;
   const j = job as Record<string, unknown> & {
     id: string;
     job_number?: number | null;
@@ -101,6 +102,8 @@ export default async function Page({
     labour_charge?: number | null;
     total_materials?: number | null;
     subtotal?: number | null;
+    vat_rate?: number | null;
+    remove_vat?: boolean | null;
     vat_amount?: number | null;
     total_inc_vat?: number | null;
     payment_terms_days?: number | null;
@@ -126,6 +129,11 @@ export default async function Page({
   const titleStr = String(j.title ?? "Job");
   const jobRef = formatJobRefFormal(jobNo) || "—";
   const plainJobNo = jobNo == null ? "—" : String(jobNo);
+  const effectiveVat = resolveEffectiveVat({
+    tenant,
+    job: j,
+    subtotal: Number(j.subtotal ?? 0),
+  });
   const clientName =
     j.clients && typeof j.clients === "object" && "company_name" in j.clients
       ? String((j.clients as { company_name?: string }).company_name ?? "—")
@@ -330,13 +338,17 @@ export default async function Page({
                 <dt className="text-slate-500">Subtotal</dt>
                 <dd className="text-slate-900">{money(j.subtotal)}</dd>
               </div>
+              {effectiveVat.showVat ? (
+                <div>
+                  <dt className="text-slate-500">VAT amount</dt>
+                  <dd className="text-slate-900">{money(effectiveVat.vatAmount)}</dd>
+                </div>
+              ) : null}
               <div>
-                <dt className="text-slate-500">VAT amount</dt>
-                <dd className="text-slate-900">{money(j.vat_amount)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Total inc VAT</dt>
-                <dd className="text-slate-900">{money(j.total_inc_vat)}</dd>
+                <dt className="text-slate-500">
+                  {effectiveVat.showVat ? "Total inc VAT" : "Total"}
+                </dt>
+                <dd className="text-slate-900">{money(effectiveVat.totalIncVat)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Payment terms (days)</dt>

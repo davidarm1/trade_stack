@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { createClient } from "@/lib/supabase/server";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 import { InvoiceView } from "./invoice-view";
 
 export default async function JobInvoiceStandalonePage({
@@ -26,7 +27,12 @@ export default async function JobInvoiceStandalonePage({
   const [{ data: tenant }, { data: client }, { data: materials }] = await Promise.all([
     supabase.from("tenants").select("*").eq("id", job.tenant_id).maybeSingle(),
     job.client_id
-      ? supabase.from("clients").select("*").eq("id", job.client_id).maybeSingle()
+      ? supabase
+          .from("clients")
+          .select("*")
+          .eq("id", job.client_id)
+          .eq("tenant_id", job.tenant_id)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     supabase
       .from("job_materials")
@@ -35,6 +41,7 @@ export default async function JobInvoiceStandalonePage({
       .eq("tenant_id", job.tenant_id)
       .order("sort_order", { ascending: true }),
   ]);
+  if (!tenant) redirect("/jobs");
 
   const settingsRows = await supabase
     .from("settings")
@@ -45,6 +52,12 @@ export default async function JobInvoiceStandalonePage({
   );
   const { showLogo, showName } = resolveBrandingFromSettings(settings);
   const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
+  const effectiveVat = resolveEffectiveVat({
+    tenant,
+    client,
+    job,
+    subtotal: Number(job.subtotal ?? 0),
+  });
 
   return (
     <InvoiceView
@@ -90,9 +103,10 @@ export default async function JobInvoiceStandalonePage({
         ).trim(),
         currency: String(tenant?.currency || "GBP").toUpperCase(),
         subtotal: Number(job.subtotal ?? 0),
-        vatAmount: Number(job.vat_amount ?? 0),
-        total: Number(job.total_inc_vat ?? 0),
-        vatRate: Number(job.vat_rate ?? settings.default_vat_rate ?? tenant?.default_vat_rate ?? 0),
+        showVat: effectiveVat.showVat,
+        vatAmount: effectiveVat.vatAmount,
+        total: effectiveVat.totalIncVat,
+        vatRate: effectiveVat.rate,
         lineItems: (materials ?? []).map((m) => ({
           id: m.id,
           item: String(m.description || "").trim(),

@@ -98,6 +98,7 @@ function makeJob(overrides: Partial<{
   payment_terms_days: number | null;
   subtotal: number;
   total_inc_vat: number | null;
+  vat_amount: number | null;
   invoice_sent_at: string | null;
   invoice_paid_at: string | null;
   date_onsite: string | null;
@@ -109,6 +110,7 @@ function makeJob(overrides: Partial<{
     payment_terms_days: overrides.payment_terms_days ?? 30,
     subtotal: overrides.subtotal ?? 100,
     total_inc_vat: overrides.total_inc_vat ?? null,
+    vat_amount: overrides.vat_amount ?? null,
     invoice_sent_at: overrides.invoice_sent_at ?? null,
     invoice_paid_at: overrides.invoice_paid_at ?? null,
     date_onsite: overrides.date_onsite ?? null,
@@ -118,6 +120,7 @@ function makeJob(overrides: Partial<{
 const BASE_INPUT = {
   receiptsTotal: 0,
   receiptsVatTotal: 0,
+  vatRegistered: false,
   wagesPaid: 0,
   quotesRows: [],
   followups: [],
@@ -137,6 +140,33 @@ describe("computePeriodMetrics — empty tenant", () => {
     expect(m.jobsThisWeek).toBe(0);
     expect(m.upcomingJobs).toBe(0);
     expect(m.overdueCount).toBe(0);
+  });
+});
+
+describe("computePeriodMetrics — VAT registration", () => {
+  const invoicedJob = makeJob({
+    vat_amount: 20,
+    invoice_sent_at: "2026-05-05T10:00:00Z",
+  });
+
+  it("returns zero VAT liability for a non-registered tenant", () => {
+    const metrics = computePeriodMetrics({
+      ...BASE_INPUT,
+      jobs: [invoicedJob],
+      receiptsVatTotal: 5,
+      vatRegistered: false,
+    });
+    expect(metrics.vatLiabilityEstimate).toBe(0);
+  });
+
+  it("calculates VAT liability for a registered tenant", () => {
+    const metrics = computePeriodMetrics({
+      ...BASE_INPUT,
+      jobs: [invoicedJob],
+      receiptsVatTotal: 5,
+      vatRegistered: true,
+    });
+    expect(metrics.vatLiabilityEstimate).toBe(15);
   });
 });
 

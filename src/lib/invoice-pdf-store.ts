@@ -2,6 +2,7 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import type { createClient } from "@/lib/supabase/server";
+import { resolveEffectiveVat } from "@/lib/effective-vat";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -33,32 +34,39 @@ export async function buildStoredInvoicePdf(args: {
   versionNo: number;
 }): Promise<{ buffer: Buffer; fileName: string }> {
   const { supabase, tenantId, jobId, versionNo } = args;
-  const [{ data: job }, { data: tenant }, { data: settingsRows }, { data: client }, { data: materials }] =
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("id", jobId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (!job) {
+    throw new Error("Job not found for invoice generation");
+  }
+
+  const [{ data: tenant }, { data: settingsRows }, { data: client }, { data: materials }] =
     await Promise.all([
-      supabase.from("jobs").select("*").eq("id", jobId).eq("tenant_id", tenantId).maybeSingle(),
-      supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle(),
-      supabase.from("settings").select("field_key, field_value").eq("tenant_id", tenantId),
-      supabase
-        .from("jobs")
-        .select("client_id")
-        .eq("id", jobId)
-        .eq("tenant_id", tenantId)
-        .maybeSingle()
-        .then(async (r) =>
-          r.data?.client_id
-            ? supabase.from("clients").select("*").eq("id", r.data.client_id).maybeSingle()
-            : ({ data: null, error: null } as const),
-        ),
+      supabase.from("tenants").select("*").eq("id", job.tenant_id).maybeSingle(),
+      supabase.from("settings").select("field_key, field_value").eq("tenant_id", job.tenant_id),
+      job.client_id
+        ? supabase
+            .from("clients")
+            .select("*")
+            .eq("id", job.client_id)
+            .eq("tenant_id", job.tenant_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase
         .from("job_materials")
         .select("*")
         .eq("job_id", jobId)
-        .eq("tenant_id", tenantId)
+        .eq("tenant_id", job.tenant_id)
         .order("sort_order", { ascending: true }),
     ]);
 
-  if (!job) {
-    throw new Error("Job not found for invoice generation");
+  if (!tenant) {
+    throw new Error("Tenant not found for invoice generation");
   }
 
   const settings = Object.fromEntries(
@@ -95,6 +103,8 @@ export async function buildStoredInvoicePdf(args: {
   const invoiceDate = new Date();
   const termsDays = Number(job.payment_terms_days ?? tenant?.default_payment_terms_days ?? 30);
   const dueDate = new Date(invoiceDate.getTime() + termsDays * 24 * 60 * 60 * 1000);
+  const subtotal = Number(job.subtotal ?? 0);
+  const effectiveVat = resolveEffectiveVat({ tenant, client, job, subtotal });
 
   const { showLogo: wantLogo, showName: wantName } = resolveBrandingFromSettings(settings);
   const logoUrl =
@@ -231,8 +241,8 @@ export async function buildStoredInvoicePdf(args: {
           {
             description: job.title || "Job works",
             quantity: 1,
-            unit_price: Number(job.total_inc_vat ?? 0),
-            total_price: Number(job.total_inc_vat ?? 0),
+            unit_price: effectiveVat.totalIncVat,
+            total_price: effectiveVat.totalIncVat,
           },
         ];
   for (const r of rows.slice(0, 16)) {
@@ -274,9 +284,6 @@ export async function buildStoredInvoicePdf(args: {
     y -= 18;
   }
 
-  const subtotal = Number(job.subtotal ?? 0);
-  const vatAmount = Number(job.vat_amount ?? 0);
-  const total = Number(job.total_inc_vat ?? subtotal + vatAmount);
   y -= 22;
   drawRight({
     page,
@@ -287,21 +294,23 @@ export async function buildStoredInvoicePdf(args: {
     size: 12,
     color: TEXT,
   });
-  y -= 18;
-  drawRight({
-    page,
-    font,
-    text: `VAT: ${money(vatAmount, currency)}`,
-    rightX: right - 10,
-    y,
-    size: 12,
-    color: TEXT,
-  });
+  if (effectiveVat.showVat) {
+    y -= 18;
+    drawRight({
+      page,
+      font,
+      text: `VAT (${effectiveVat.rate}%): ${money(effectiveVat.vatAmount, currency)}`,
+      rightX: right - 10,
+      y,
+      size: 12,
+      color: TEXT,
+    });
+  }
   y -= 22;
   drawRight({
     page,
     font: bold,
-    text: `Total: ${money(total, currency)}`,
+    text: `Total: ${money(effectiveVat.totalIncVat, currency)}`,
     rightX: right - 10,
     y,
     size: 15,
