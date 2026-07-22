@@ -5,10 +5,6 @@ import type { UserRole } from "@/types/database";
 
 type AuthenticatorLevel = "aal1" | "aal2" | null;
 
-function requiresMfa(role: UserRole | null): boolean {
-  return role === "owner" || role === "office";
-}
-
 export async function updateSession(
   request: NextRequest,
 ): Promise<{
@@ -70,14 +66,14 @@ export async function updateSession(
     const { data: factors } = await supabase.auth.mfa.listFactors();
     mfa.hasTotp = Boolean(factors?.totp.length);
 
-    if (requiresMfa(role)) {
-      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      mfa = {
-        hasTotp: mfa.hasTotp,
-        currentLevel: assurance?.currentLevel ?? null,
-        nextLevel: assurance?.nextLevel ?? null,
-      };
-    }
+    // Always resolve AAL when signed in so /admin MFA gating works for
+    // allowlisted users who are not owner/office on their tenant role.
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    mfa = {
+      hasTotp: mfa.hasTotp,
+      currentLevel: assurance?.currentLevel ?? null,
+      nextLevel: assurance?.nextLevel ?? null,
+    };
   }
 
   return { response: supabaseResponse, user, role, mfa };

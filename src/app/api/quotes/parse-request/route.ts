@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getSessionTenantOrError } from "@/lib/api-auth";
+import { recordAiUsage } from "@/lib/ai-usage";
 import { normalizeCurrencyCode } from "@/lib/format-currency";
 import {
   QUOTES_AI_PRICING_PROMPT_DEFAULT,
@@ -163,15 +164,13 @@ export async function POST(request: Request) {
     office_sales_pitch: strOrNull(parsed.office_sales_pitch),
   };
 
-  const usage = completion.usage;
-  await session.supabase.from("ai_usage").insert({
-    tenant_id: session.tenantId,
+  await recordAiUsage({
+    supabase: session.supabase,
+    tenantId: session.tenantId,
     feature: "quote_request_parse",
     model: "gpt-4o-mini",
-    prompt_tokens: usage?.prompt_tokens ?? null,
-    completion_tokens: usage?.completion_tokens ?? null,
-    total_tokens: usage?.total_tokens ?? null,
-    cost_usd: null,
+    usage: completion.usage,
+    logLabel: "[quotes/parse-request]",
   });
 
   return NextResponse.json({ prefill });

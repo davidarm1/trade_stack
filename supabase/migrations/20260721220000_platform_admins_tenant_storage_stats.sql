@@ -1,10 +1,7 @@
--- Standalone copy of the platform-admin foundation migration.
--- Prefer applying via supabase/migrations/20260721220000_platform_admins_tenant_storage_stats.sql.
+-- Platform-admin allowlist and operator-computed B2 storage totals.
+-- Idempotent: safe if tables already exist from the standalone SQL copy.
 --
--- Manual step required after applying: insert the operator's own auth
--- user id into public.platform_admins.
---
--- Example (replace with the real auth.users id):
+-- Manual step after apply: insert the operator auth.users id:
 --   INSERT INTO public.platform_admins (user_id)
 --   VALUES ('00000000-0000-0000-0000-000000000000')
 --   ON CONFLICT (user_id) DO NOTHING;

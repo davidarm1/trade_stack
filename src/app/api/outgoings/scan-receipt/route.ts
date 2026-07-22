@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { createHash } from "crypto";
 import { getSessionTenantOrError, rejectForeignTenantId } from "@/lib/api-auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordAiUsage } from "@/lib/ai-usage";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { deleteFromB2ByKey, getSignedDownloadUrl, uploadToB2 } from "@/lib/b2";
@@ -416,19 +417,19 @@ async function runReceiptOcrAfterUpload(args: {
     scanConfidence = "failed";
   }
 
-  const { error: usageErr } = await supabase.from("ai_usage").insert({
-    tenant_id: tenantId,
+  // Metering failure is logged inside recordAiUsage; do not fail the receipt scan.
+  await recordAiUsage({
+    supabase,
+    tenantId,
     feature: "receipt_scan",
     model,
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
-    total_tokens: totalTokens,
-    cost_usd: null,
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+    },
+    logLabel: "[scan-receipt]",
   });
-
-  if (usageErr) {
-    console.error("[scan-receipt] ai_usage insert failed:", usageErr.message);
-  }
 
   const aiConfidence =
     scanConfidence === "high" ? 0.9 : scanConfidence === "low" ? 0.45 : null;

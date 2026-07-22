@@ -1,10 +1,11 @@
-export type AiUsageGroupKey = "quote" | "receipt" | "outgoing";
+export type AiUsageGroupKey = "quote" | "receipt" | "job";
 
 export type AiUsageGroupConfig = {
   key: AiUsageGroupKey;
   label: string;
   featureNames: string[];
-  monthlySoftCapPence: number;
+  /** Soft monthly budget in USD (OpenAI bill currency). */
+  monthlySoftCapUsd: number;
 };
 
 /**
@@ -17,33 +18,41 @@ export const AI_USAGE_GROUPS: ReadonlyArray<AiUsageGroupConfig> = [
     key: "quote",
     label: "Quote",
     featureNames: ["quote_price", "quote_request_parse", "mobile_quote_request"],
-    monthlySoftCapPence: 5000,
+    monthlySoftCapUsd: 50,
   },
   {
     key: "receipt",
     label: "Receipt",
     featureNames: ["receipt_scan"],
-    monthlySoftCapPence: 2500,
+    monthlySoftCapUsd: 25,
   },
   {
-    key: "outgoing",
-    label: "Outgoing",
+    key: "job",
+    label: "Job message",
     featureNames: ["job_message_parse"],
-    monthlySoftCapPence: 2500,
+    monthlySoftCapUsd: 25,
   },
 ] as const;
 
 export type AiUsageGroupSummary = {
   calls: number;
-  costPence: number;
-  monthlySoftCapPence: number;
+  costUsd: number;
+  monthlySoftCapUsd: number;
 };
 
 export type AiUsageSummary = Record<AiUsageGroupKey, AiUsageGroupSummary>;
 
+export type AiUsageCostRow = {
+  feature: string;
+  cost_usd: number | null;
+};
+
 export function emptyAiUsageSummary(): AiUsageSummary {
   return Object.fromEntries(
-    AI_USAGE_GROUPS.map((group) => [group.key, { calls: 0, costPence: 0, monthlySoftCapPence: group.monthlySoftCapPence }]),
+    AI_USAGE_GROUPS.map((group) => [
+      group.key,
+      { calls: 0, costUsd: 0, monthlySoftCapUsd: group.monthlySoftCapUsd },
+    ]),
   ) as AiUsageSummary;
 }
 
@@ -53,16 +62,27 @@ export function aiUsageGroupForFeature(feature: string): AiUsageGroupConfig | nu
   return AI_USAGE_GROUPS.find((group) => group.featureNames.includes(raw)) ?? null;
 }
 
-export function summarizeAiUsageRows(
-  rows: Array<{ feature: string; cost_pence: number | null }>,
-): AiUsageSummary {
+export function summarizeAiUsageRows(rows: AiUsageCostRow[]): AiUsageSummary {
   const summary = emptyAiUsageSummary();
   for (const row of rows) {
     const group = aiUsageGroupForFeature(row.feature);
     if (!group) continue;
-    const costPence = typeof row.cost_pence === "number" ? row.cost_pence : Number(row.cost_pence ?? 0);
+    const costUsd =
+      typeof row.cost_usd === "number" ? row.cost_usd : Number(row.cost_usd ?? 0);
     summary[group.key].calls += 1;
-    summary[group.key].costPence += Number.isFinite(costPence) ? costPence : 0;
+    summary[group.key].costUsd += Number.isFinite(costUsd) ? costUsd : 0;
   }
   return summary;
+}
+
+export function aiUsageMonthTotalUsd(summary: AiUsageSummary): number {
+  return AI_USAGE_GROUPS.reduce((sum, group) => sum + summary[group.key].costUsd, 0);
+}
+
+export function sumAiUsageCostUsd(rows: AiUsageCostRow[]): number {
+  return rows.reduce((sum, row) => {
+    const cost =
+      typeof row.cost_usd === "number" ? row.cost_usd : Number(row.cost_usd ?? 0);
+    return sum + (Number.isFinite(cost) ? cost : 0);
+  }, 0);
 }

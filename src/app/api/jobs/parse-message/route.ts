@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getSessionTenantOrError } from "@/lib/api-auth";
+import { recordAiUsage } from "@/lib/ai-usage";
 import { normalizeCurrencyCode } from "@/lib/format-currency";
 import {
   QUOTES_AI_PRICING_PROMPT_DEFAULT,
@@ -263,9 +264,8 @@ export async function POST(request: Request) {
     settingRow?.field_value?.trim() || QUOTES_AI_PRICING_PROMPT_DEFAULT;
   const tenantCurrency = normalizeCurrencyCode(tenantRow?.currency);
 
-  let promptTokens: number | null = null;
-  let completionTokens: number | null = null;
-  let totalTokens: number | null = null;
+  let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null =
+    null;
   let prefill: JobAiPrefill | null = null;
   let parseError: string | null = null;
 
@@ -282,10 +282,7 @@ export async function POST(request: Request) {
       ],
     });
 
-    const usage = completion.usage;
-    promptTokens = usage?.prompt_tokens ?? null;
-    completionTokens = usage?.completion_tokens ?? null;
-    totalTokens = usage?.total_tokens ?? null;
+    usage = completion.usage ?? null;
 
     const raw = completion.choices[0]?.message?.content ?? "";
     const obj = JSON.parse(stripJsonFence(raw)) as Record<string, unknown>;
@@ -299,18 +296,16 @@ export async function POST(request: Request) {
       e instanceof Error ? e.message : "AI parsing failed. Try again or enter manually.";
   }
 
-  const { error: usageErr } = await supabase.from("ai_usage").insert({
-    tenant_id: tenantId,
+  const metered = await recordAiUsage({
+    supabase,
+    tenantId,
     feature: "job_message_parse",
     model,
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
-    total_tokens: totalTokens,
-    cost_usd: null,
+    usage,
+    logLabel: "[parse-message]",
   });
-
-  if (usageErr) {
-    return NextResponse.json({ error: usageErr.message }, { status: 500 });
+  if (!metered.ok) {
+    return NextResponse.json({ error: metered.error }, { status: 500 });
   }
 
   if (parseError || !prefill) {

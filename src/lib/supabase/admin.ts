@@ -1,7 +1,10 @@
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 
 /**
  * Service role client — use only in trusted server code (e.g. registration bootstrap).
+ * Never import this module from a Client Component; `server-only` will fail the build.
  * TODO: Replace with Edge Function or DB trigger if you prefer not to use service role in the app.
  */
 export function createServiceRoleClient() {

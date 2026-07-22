@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import OpenAI from "openai";
 import { getQuotes } from "@/actions/quotes";
 import { getSettingValue, upsertSettingValue } from "@/actions/settings";
+import { recordAiUsage } from "@/lib/ai-usage";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
@@ -117,15 +118,13 @@ export default async function QuotesPage({
       .eq("id", quoteId)
       .eq("tenant_id", ctx.tenantId);
 
-    const usage = completion.usage;
-    await supabase.from("ai_usage").insert({
-      tenant_id: ctx.tenantId,
+    await recordAiUsage({
+      supabase,
+      tenantId: ctx.tenantId,
       feature: "quote_price",
       model: "gpt-4o-mini",
-      prompt_tokens: usage?.prompt_tokens ?? null,
-      completion_tokens: usage?.completion_tokens ?? null,
-      total_tokens: usage?.total_tokens ?? null,
-      cost_usd: null,
+      usage: completion.usage,
+      logLabel: "[quotes/ai-price]",
     });
 
     revalidatePath("/quotes");

@@ -11,6 +11,7 @@ const SECURITY_PATH = "/account/security";
 
 const PROTECTED_PREFIXES = [
   "/account",
+  "/admin",
   "/dashboard",
   "/jobs",
   "/clients",
@@ -26,6 +27,10 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+}
+
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
 function isMfaAllowedPath(pathname: string): boolean {
@@ -52,7 +57,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const { response, user, role, mfa } = await updateSession(request);
-  const mandatoryMfa = role === "owner" || role === "office";
+  // Platform console requires AAL2 independently of tenant role.
+  const mandatoryMfa =
+    role === "owner" || role === "office" || isAdminPath(pathname);
   const needsMfaSetup = !mfa.hasTotp;
   const needsMfaChallenge =
     mandatoryMfa && mfa.hasTotp && mfa.currentLevel !== "aal2";
