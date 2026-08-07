@@ -13,6 +13,11 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/timesheets",
     "/wages",
     "/team",
+    "/vans",
+    "/van-stock",
+    "/store-room",
+    "/email-marketing",
+    "/onboarding",
     "/settings",
   ],
   office: [
@@ -26,6 +31,11 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/timesheets",
     "/wages",
     "/team",
+    "/vans",
+    "/van-stock",
+    "/store-room",
+    "/email-marketing",
+    "/onboarding",
     "/settings",
   ],
   engineer: [
@@ -36,8 +46,19 @@ export const NAV_HREFS_BY_ROLE: Record<UserRole, readonly string[]> = {
     "/clients",
     "/receipts",
     "/timesheets",
+    "/vans",
+    "/van-stock",
+    "/store-room",
+    "/onboarding",
   ],
-  viewer: ["/account/security", "/dashboard", "/jobs", "/quotes", "/clients"],
+  viewer: [
+    "/account/security",
+    "/dashboard",
+    "/jobs",
+    "/quotes",
+    "/clients",
+    "/onboarding",
+  ],
 };
 
 export const NAV_ITEMS: { href: string; label: string }[] = [
@@ -50,6 +71,11 @@ export const NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/timesheets", label: "Timesheets" },
   { href: "/wages", label: "Wages" },
   { href: "/team", label: "Team" },
+  { href: "/vans", label: "Vans" },
+  { href: "/van-stock", label: "Van Stock" },
+  { href: "/store-room", label: "Store Room" },
+  { href: "/email-marketing", label: "Email Marketing" },
+  { href: "/onboarding", label: "Onboarding" },
   { href: "/settings", label: "Settings" },
   { href: "/account/security", label: "Security" },
 ];
@@ -76,11 +102,11 @@ export function navItemsForRole(
 /** Sidebar access summary for Team page and invite UI. */
 export const TEAM_ROLE_HELP: Record<UserRole, string> = {
   owner:
-    "Full access: all menus including Team and Settings. Typically the company account owner.",
+    "Full access: all menus including Team, Email Marketing, and Settings. Typically the company account owner.",
   office:
     "Same menus as owner (Dashboard through Settings). Can add internal staff and manage the company.",
   engineer:
-    "Dashboard, Jobs, Quotes, Clients, Outgoings, Timesheets. No Wages, Team, or Settings.",
+    "Dashboard, Jobs, Quotes, Clients, Outgoings, Timesheets, Vans, Store Room, Onboarding. No Wages, Team, Email Marketing, or Settings.",
   viewer:
-    "Dashboard, Jobs, Quotes, Clients only — no outgoings, timesheets, wages, team, or settings.",
+    "Dashboard, Jobs, Quotes, Clients, Onboarding only — no outgoings, timesheets, wages, team, vans, store room, or settings.",
 };
