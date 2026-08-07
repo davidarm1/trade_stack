@@ -34,6 +34,11 @@ export function NewClientForm() {
       default_vat_exempt: form.get("default_vat_exempt") === "on",
       notes: String(form.get("notes") ?? "") || null,
       is_active: true,
+      marketing_opt_in: form.get("marketing_opt_in") === "on",
+      marketing_opted_in_at:
+        form.get("marketing_opt_in") === "on"
+          ? new Date().toISOString()
+          : null,
     });
 
     setPending(false);
@@ -184,6 +189,18 @@ export function NewClientForm() {
           className="text-sm text-slate-700"
         >
           Default VAT exempt
+        </label>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="marketing_opt_in"
+          name="marketing_opt_in"
+          type="checkbox"
+          className="rounded border-slate-300"
+        />
+        <label htmlFor="marketing_opt_in" className="text-sm text-slate-700">
+          Opted in to marketing email (confirmed with the client — required
+          before they can receive any Email Marketing send)
         </label>
       </div>
       <div>

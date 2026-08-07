@@ -109,3 +109,41 @@ export async function sendPasswordResetEmail(args: {
 
   await sendAuthEmail({ to: args.to, subject, html, text });
 }
+
+/**
+ * One individually-addressed email — for email marketing sends (see
+ * src/actions/email-marketing.ts). Unlike sendAuthEmail, this reports
+ * success/failure back to the caller so it can be recorded per-recipient
+ * in `email_sends`. Reuses the same Resend client/config as auth email —
+ * one Resend call per recipient, never a multi-recipient `to: [...]`.
+ */
+export async function sendMarketingEmail(args: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { resend, from } = getResendClient();
+  if (!resend || !from) {
+    return { success: false, error: "Email is not configured (missing Resend env vars)." };
+  }
+
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown send error",
+    };
+  }
+}
