@@ -66,6 +66,8 @@ export interface Client {
   default_vat_exempt: boolean | null;
   notes: string | null;
   is_active: boolean;
+  marketing_opt_in: boolean;
+  marketing_opted_in_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -343,5 +345,139 @@ export interface MobileAccessToken {
   expires_at: string;
   revoked_at: string | null;
   used_at: string | null;
+  created_at: string;
+}
+
+// --- Store room ---------------------------------------------------------
+
+export interface StockItem {
+  id: string;
+  tenant_id: string;
+  name: string;
+  sku: string | null;
+  unit: string | null;
+  reorder_threshold: number | null;
+  current_qty: number;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StockMovementDirection = "out" | "in";
+
+export interface StockMovement {
+  id: string;
+  tenant_id: string;
+  stock_item_id: string;
+  direction: StockMovementDirection;
+  quantity: number;
+  job_id: string | null;
+  vehicle_id: string | null;
+  user_id: string;
+  notes: string | null;
+  moved_at: string;
+}
+
+// --- Van maintenance -----------------------------------------------------
+
+export interface Vehicle {
+  id: string;
+  tenant_id: string;
+  registration: string;
+  make_model: string | null;
+  assigned_user_id: string | null;
+  mot_due_date: string | null;
+  insurance_renewal_date: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VehicleMaintenanceLogEntry {
+  id: string;
+  tenant_id: string;
+  vehicle_id: string;
+  logged_date: string;
+  description: string;
+  cost: number | null;
+  receipt_id: string | null;
+  created_by_id: string | null;
+  created_at: string;
+}
+
+// --- Van stock -------------------------------------------------------------
+
+export interface VanStock {
+  id: string;
+  tenant_id: string;
+  vehicle_id: string;
+  stock_item_id: string;
+  quantity: number;
+  last_checked_at: string | null;
+  last_checked_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Onboarding: staff acceptance forms ------------------------------------
+
+export interface OnboardingDocument {
+  id: string;
+  tenant_id: string;
+  title: string;
+  body: string;
+  version: number;
+  required: boolean;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StaffAcceptance {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  document_id: string;
+  document_version: number;
+  accepted_at: string;
+}
+
+// --- Email marketing ---------------------------------------------------
+
+export type EmailMarketingAudience = "staff" | "clients";
+export type EmailSendStatus = "queued" | "sent" | "failed";
+
+export interface EmailTemplate {
+  id: string;
+  tenant_id: string;
+  name: string;
+  subject: string;
+  body_html: string;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailCampaign {
+  id: string;
+  tenant_id: string;
+  template_id: string;
+  audience: EmailMarketingAudience;
+  sent_by_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export interface EmailSend {
+  id: string;
+  tenant_id: string;
+  campaign_id: string;
+  recipient_email: string;
+  recipient_name: string | null;
+  status: EmailSendStatus;
+  error: string | null;
+  sent_at: string | null;
   created_at: string;
 }
