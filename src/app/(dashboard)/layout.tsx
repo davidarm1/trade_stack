@@ -7,6 +7,7 @@ import {
   BRANDING_USE_LOGO_LEGACY_KEY,
   resolveBrandingFromSettings,
 } from "@/lib/branding-settings";
+import { getOutstandingDocuments } from "@/actions/onboarding";
 import type { UserRole } from "@/types/database";
 
 export default async function DashboardLayout({
@@ -60,6 +61,13 @@ export default async function DashboardLayout({
 
   const userRole = (profile?.role as UserRole | null) ?? null;
 
+  // Soft nudge only — not a hard gate. A real block-until-accepted flow
+  // belongs in src/middleware.ts alongside the existing auth/session
+  // routing, which is deliberately left untouched here (see
+  // Trade Stack - Onboarding.md open questions).
+  const { data: outstandingDocs } = await getOutstandingDocuments();
+  const outstandingCount = outstandingDocs?.length ?? 0;
+
   return (
     <DashboardShell
       companyName={companyName}
@@ -68,6 +76,7 @@ export default async function DashboardLayout({
       brandingShowCompanyName={brandingShowCompanyName}
       userName={profile?.name ?? user.email ?? null}
       userRole={userRole}
+      outstandingOnboardingCount={outstandingCount}
     >
       {children}
     </DashboardShell>

@@ -14,6 +14,7 @@ export function DashboardShell({
   brandingShowCompanyName,
   userName,
   userRole,
+  outstandingOnboardingCount = 0,
   children,
 }: {
   companyName: string | null;
@@ -24,6 +25,8 @@ export function DashboardShell({
   brandingShowCompanyName?: boolean;
   userName: string | null;
   userRole: UserRole | null;
+  /** Required onboarding documents not yet accepted by this user — shows a banner, doesn't block. */
+  outstandingOnboardingCount?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -35,6 +38,8 @@ export function DashboardShell({
   const showName = brandingShowCompanyName !== false;
   const hideDashboardNavigation =
     pathname === "/account/security" && searchParams.get("required") === "true";
+  const showOnboardingBanner =
+    outstandingOnboardingCount > 0 && pathname !== "/onboarding";
 
   async function handleSignOut() {
     await signOut();
@@ -155,6 +160,16 @@ export function DashboardShell({
               ) : null}
             </span>
           </header>
+        )}
+        {showOnboardingBanner && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            You have {outstandingOnboardingCount} onboarding{" "}
+            {outstandingOnboardingCount === 1 ? "document" : "documents"} to
+            accept.{" "}
+            <Link href="/onboarding" className="font-medium underline">
+              Review now
+            </Link>
+          </div>
         )}
         <main className="flex-1 p-6">{children}</main>
       </div>
