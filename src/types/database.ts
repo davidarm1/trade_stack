@@ -38,6 +38,8 @@ export interface UserRow {
   work_contract_type: WorkContractType | null;
   charge_rate: number | null;
   hourly_rate: number | null;
+  /** Flat rate paid for travel_hours on a timesheet, distinct from hourly_rate. */
+  travel_rate: number | null;
   company_phone: string | null;
   approver1_id: string | null;
   approver2_id: string | null;
@@ -297,6 +299,14 @@ export interface Timesheet {
   start_time: string | null;
   end_time: string | null;
   duration_minutes: number | null;
+  /**
+   * Engineer-reported travel time for this visit, rounded to the nearest
+   * hour, paid at the user's travel_rate rather than hourly_rate. One
+   * timesheet row = one visit to a job, so a multi-visit job just has
+   * multiple timesheet rows, each with its own travel_hours — no separate
+   * "visit" concept needed. Not yet populated by any UI; schema only.
+   */
+  travel_hours: number | null;
   status: string | null;
   comments: string | null;
   approved_by_id: string | null;
@@ -316,6 +326,10 @@ export interface Wage {
   overtime_rate: number | null;
   base_wage: number | null;
   overtime_wage: number | null;
+  /** Sum of timesheets.travel_hours for the period; not yet computed anywhere. */
+  travel_hours: number | null;
+  /** travel_hours * users.travel_rate; not yet computed anywhere. */
+  travel_wage: number | null;
   total_wage: number | null;
   approval_status: string | null;
   approved_by_id: string | null;
