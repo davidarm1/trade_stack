@@ -1,5 +1,6 @@
 import { getSettings } from "@/actions/settings";
 import { SettingsForm } from "./settings-form";
+import { TravelPaySettings } from "./travel-pay-settings";
 
 export default async function SettingsPage() {
   const { data, error } = await getSettings();
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
         tenant={data?.tenant ?? null}
         keyValues={data?.keyValues ?? {}}
       />
+      <TravelPaySettings keyValues={data?.keyValues ?? {}} />
     </div>
   );
 }

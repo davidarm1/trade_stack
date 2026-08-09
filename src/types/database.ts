@@ -128,6 +128,8 @@ export interface Job {
   jobsheet_url: string | null;
   signature_url: string | null;
   signed_at: string | null;
+  /** Straight-line distance from the tenant's depot postcode, cached — see postcode-distance.ts. */
+  travel_distance_miles: number | null;
 }
 
 /** B2 upload metadata (table tenant_files). */

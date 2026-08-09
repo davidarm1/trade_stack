@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext, getCurrentUserRole } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
+import { postcodeDistanceMiles } from "@/lib/postcode-distance";
+import { resolveTravelDistanceSettings } from "@/lib/travel-distance-settings";
 
 async function requireWageManagerContext() {
   const ctx = await getTenantContext();
@@ -71,24 +73,41 @@ export async function approveWage(id: string) {
   return { data: row, error: null };
 }
 
+export type ApprovedTravelHoursResult = {
+  totalHours: number;
+  /** Distance rule configured but a job's site postcode couldn't be geocoded — hours were still included (fail open), review manually. */
+  undeterminedCount: number;
+  /** Distance rule active (depot postcode + threshold both configured). */
+  distanceRuleActive: boolean;
+};
+
 /**
  * Sums travel_hours from *approved* timesheets for a user within an
  * explicit date range — office picks the range rather than this guessing
  * at what a wage row's single `period_date` is meant to represent (no
  * period-length convention was found anywhere in the codebase).
+ *
+ * If a depot postcode + distance threshold are configured (Settings —
+ * separate from any client-facing travel pricing, per your answer that
+ * these are independent rules), a visit's travel_hours only count if its
+ * job's site is at or beyond that distance from the depot. Distance is
+ * cached on jobs.travel_distance_miles after first lookup. A postcode
+ * that can't be geocoded fails open (hours still counted) rather than
+ * silently underpaying someone over a lookup failure — undeterminedCount
+ * tells the caller to flag that for manual review.
  */
 export async function getApprovedTravelHours(
   userId: string,
   periodFrom: string,
   periodTo: string,
-) {
+): Promise<{ data: ApprovedTravelHoursResult | null; error: string | null }> {
   const ctx = await requireWageManagerContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data: rows, error } = await supabase
     .from("timesheets")
-    .select("travel_hours")
+    .select("travel_hours, job_id")
     .eq("tenant_id", ctx.tenantId)
     .eq("user_id", userId)
     .eq("status", "approved")
@@ -96,11 +115,83 @@ export async function getApprovedTravelHours(
     .lte("shift_date", periodTo);
 
   if (error) return { data: null, error: error.message };
-  const totalHours = (data ?? []).reduce(
-    (sum, row) => sum + (Number(row.travel_hours) || 0),
-    0,
+
+  const { data: settingsRows, error: settingsErr } = await supabase
+    .from("settings")
+    .select("field_key, field_value")
+    .eq("tenant_id", ctx.tenantId);
+  if (settingsErr) return { data: null, error: settingsErr.message };
+  const settingsMap = Object.fromEntries(
+    (settingsRows ?? []).map((r) => [String(r.field_key), String(r.field_value ?? "")]),
   );
-  return { data: totalHours, error: null };
+  const { depotPostcode, thresholdMiles } = resolveTravelDistanceSettings(settingsMap);
+  const distanceRuleActive = Boolean(depotPostcode && thresholdMiles != null);
+
+  if (!distanceRuleActive) {
+    const totalHours = (rows ?? []).reduce(
+      (sum, row) => sum + (Number(row.travel_hours) || 0),
+      0,
+    );
+    return {
+      data: { totalHours, undeterminedCount: 0, distanceRuleActive: false },
+      error: null,
+    };
+  }
+
+  let totalHours = 0;
+  let undeterminedCount = 0;
+  const jobIds = [...new Set((rows ?? []).map((r) => r.job_id).filter(Boolean))] as string[];
+  const distanceByJobId = new Map<string, number | null>();
+
+  for (const jobId of jobIds) {
+    const { data: job, error: jobErr } = await supabase
+      .from("jobs")
+      .select("id, site_postcode, travel_distance_miles")
+      .eq("id", jobId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+    if (jobErr || !job) {
+      distanceByJobId.set(jobId, null);
+      continue;
+    }
+    if (job.travel_distance_miles != null) {
+      distanceByJobId.set(jobId, Number(job.travel_distance_miles));
+      continue;
+    }
+    if (!job.site_postcode) {
+      distanceByJobId.set(jobId, null);
+      continue;
+    }
+    const miles = await postcodeDistanceMiles(depotPostcode!, job.site_postcode);
+    distanceByJobId.set(jobId, miles);
+    if (miles != null) {
+      await supabase
+        .from("jobs")
+        .update({ travel_distance_miles: miles })
+        .eq("id", jobId)
+        .eq("tenant_id", ctx.tenantId);
+    }
+  }
+
+  for (const row of rows ?? []) {
+    const hours = Number(row.travel_hours) || 0;
+    if (hours <= 0) continue;
+    const distance = row.job_id ? distanceByJobId.get(row.job_id) : null;
+    if (distance == null) {
+      // Fail open: no job link, or geocoding failed — count it, flag it.
+      totalHours += hours;
+      undeterminedCount += 1;
+      continue;
+    }
+    if (distance >= thresholdMiles!) {
+      totalHours += hours;
+    }
+  }
+
+  return {
+    data: { totalHours, undeterminedCount, distanceRuleActive: true },
+    error: null,
+  };
 }
 
 /**
@@ -147,23 +238,23 @@ export async function applyTravelPayToWage(
     };
   }
 
-  const { data: travelHours, error: hoursErr } = await getApprovedTravelHours(
+  const { data: summary, error: hoursErr } = await getApprovedTravelHours(
     wage.user_id,
     periodFrom,
     periodTo,
   );
-  if (hoursErr || travelHours == null) {
+  if (hoursErr || summary == null) {
     return { data: null, error: hoursErr ?? "Could not total travel hours." };
   }
 
-  const travelWage = travelHours * travelRate;
+  const travelWage = summary.totalHours * travelRate;
   const totalWage =
     (Number(wage.base_wage) || 0) + (Number(wage.overtime_wage) || 0) + travelWage;
 
   const { data: updated, error: updateErr } = await supabase
     .from("wages")
     .update({
-      travel_hours: travelHours,
+      travel_hours: summary.totalHours,
       travel_wage: travelWage,
       total_wage: totalWage,
       updated_at: new Date().toISOString(),
@@ -175,7 +266,10 @@ export async function applyTravelPayToWage(
   if (updateErr) return { data: null, error: updateErr.message };
 
   revalidatePath("/wages");
-  return { data: updated, error: null };
+  return {
+    data: { wage: updated, undeterminedCount: summary.undeterminedCount },
+    error: null,
+  };
 }
 
 export async function rejectWage(id: string, reason: string) {

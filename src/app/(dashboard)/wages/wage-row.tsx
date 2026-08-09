@@ -31,8 +31,13 @@ export function WageRow({
   const [expanded, setExpanded] = useState(false);
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
-  const [preview, setPreview] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{
+    totalHours: number;
+    undeterminedCount: number;
+    distanceRuleActive: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -58,15 +63,21 @@ export function WageRow({
     if (!periodFrom || !periodTo) return;
     setApplying(true);
     setError(null);
-    const { error: err } = await applyTravelPayToWage(
+    setNotice(null);
+    const { data, error: err } = await applyTravelPayToWage(
       wage.id,
       periodFrom,
       periodTo,
     );
     setApplying(false);
-    if (err) {
-      setError(err);
+    if (err || !data) {
+      setError(err ?? "Could not apply travel pay");
       return;
+    }
+    if (data.undeterminedCount > 0) {
+      setNotice(
+        `Applied, but ${data.undeterminedCount} visit(s) had a job site postcode that couldn't be located — those hours were included anyway rather than risk underpaying. Worth a manual check.`,
+      );
     }
     setExpanded(false);
     setPreview(null);
@@ -100,6 +111,13 @@ export function WageRow({
           </button>
         </td>
       </tr>
+      {notice && !expanded && (
+        <tr>
+          <td colSpan={5} className="bg-amber-50 px-4 py-2 text-xs text-amber-900">
+            {notice}
+          </td>
+        </tr>
+      )}
       {expanded && (
         <tr>
           <td colSpan={5} className="bg-slate-50 px-4 py-4">
@@ -145,10 +163,21 @@ export function WageRow({
                 </button>
                 {preview != null && (
                   <span className="text-sm text-slate-700">
-                    {preview} approved travel hour{preview === 1 ? "" : "s"}
+                    {preview.totalHours} approved travel hour
+                    {preview.totalHours === 1 ? "" : "s"}
+                    {preview.distanceRuleActive
+                      ? " (distance rule applied)"
+                      : " (no distance rule configured — all approved travel hours count)"}
                   </span>
                 )}
               </div>
+              {preview != null && preview.undeterminedCount > 0 && (
+                <p className="text-xs text-amber-700">
+                  {preview.undeterminedCount} visit(s) had a job site
+                  postcode that couldn&apos;t be located for the distance
+                  check — included anyway rather than risk underpaying.
+                </p>
+              )}
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
                 type="button"
