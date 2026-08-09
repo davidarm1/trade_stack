@@ -30,7 +30,7 @@ export async function getEmailTemplates() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("email_templates")
+    .from("trade_stack_email_templates")
     .select("*")
     .eq("tenant_id", ctx.tenantId)
     .order("created_at", { ascending: false });
@@ -45,7 +45,7 @@ export async function getEmailTemplate(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("email_templates")
+    .from("trade_stack_email_templates")
     .select("*")
     .eq("tenant_id", ctx.tenantId)
     .eq("id", id)
@@ -65,7 +65,7 @@ export async function createEmailTemplate(args: {
   const supabase = await createClient();
 
   const { data: row, error } = await supabase
-    .from("email_templates")
+    .from("trade_stack_email_templates")
     .insert({
       tenant_id: ctx.tenantId,
       name: args.name,
@@ -87,8 +87,8 @@ export async function getCampaigns() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("email_campaigns")
-    .select("*, template:email_templates(name), sends:email_sends(status)")
+    .from("trade_stack_email_campaigns")
+    .select("*, template:trade_stack_email_templates(name), sends:trade_stack_email_sends(status)")
     .eq("tenant_id", ctx.tenantId)
     .order("created_at", { ascending: false });
 
@@ -133,7 +133,9 @@ async function getStaffRecipients(tenantId: string) {
 /**
  * Send a campaign: resolves recipients for the chosen audience, then sends
  * one individually-addressed email per recipient (never a bulk/CC send),
- * recording a status row for each in `email_sends`.
+ * recording a status row for each in `trade_stack_email_sends` (named to
+ * avoid a collision with a pre-existing, unrelated email_sends table on
+ * this project — see the 20260812090000 migration).
  *
  * Client audience is restricted to `marketing_opt_in = true` rows —
  * enforced here, not just in the UI. There is no unsubscribe-link /
@@ -149,7 +151,7 @@ export async function sendCampaign(args: {
   const supabase = await createClient();
 
   const { data: template, error: templateErr } = await supabase
-    .from("email_templates")
+    .from("trade_stack_email_templates")
     .select("*")
     .eq("id", args.templateId)
     .eq("tenant_id", ctx.tenantId)
@@ -175,7 +177,7 @@ export async function sendCampaign(args: {
   }
 
   const { data: campaign, error: campaignErr } = await supabase
-    .from("email_campaigns")
+    .from("trade_stack_email_campaigns")
     .insert({
       tenant_id: ctx.tenantId,
       template_id: args.templateId,
@@ -198,7 +200,7 @@ export async function sendCampaign(args: {
       text: template.body_html.replace(/<[^>]+>/g, " ").trim(),
     });
 
-    await supabase.from("email_sends").insert({
+    await supabase.from("trade_stack_email_sends").insert({
       tenant_id: ctx.tenantId,
       campaign_id: campaign.id,
       recipient_email: recipient.email,
@@ -225,7 +227,7 @@ export async function getCampaignSends(campaignId: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("email_sends")
+    .from("trade_stack_email_sends")
     .select("*")
     .eq("tenant_id", ctx.tenantId)
     .eq("campaign_id", campaignId)
