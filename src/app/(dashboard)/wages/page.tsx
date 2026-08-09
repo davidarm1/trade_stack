@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { getWages } from "@/actions/wages";
 import { getTeamMembers } from "@/actions/team";
-import { formatCurrency } from "@/lib/format-currency";
 import { getTenantCurrencyCode } from "@/lib/tenant-currency";
-import { ApprovalBadge, WagesFilters } from "./wages-filters";
+import { WagesFilters } from "./wages-filters";
+import { WageRow } from "./wage-row";
 
 export default async function WagesPage({
   searchParams,
@@ -65,13 +65,16 @@ export default async function WagesPage({
               <th className="px-4 py-3 text-left font-medium text-slate-700">
                 Approval
               </th>
+              <th className="px-4 py-3 text-left font-medium text-slate-700">
+                Travel pay
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {(rows ?? []).length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-slate-500"
                 >
                   No wage records.
@@ -84,28 +87,19 @@ export default async function WagesPage({
                   period_date?: string | null;
                   user_id?: string | null;
                   total_wage?: number | null;
+                  travel_wage?: number | null;
                   approval_status?: string | null;
                 }) => (
-                  <tr key={w.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-700">
-                      {w.period_date
-                        ? new Date(w.period_date).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {userOptions.find((u) => u.id === w.user_id)?.name ??
-                        w.user_id ??
-                        "—"}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-slate-700">
-                      {w.total_wage != null
-                        ? formatCurrency(w.total_wage, currencyCode)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ApprovalBadge status={w.approval_status} />
-                    </td>
-                  </tr>
+                  <WageRow
+                    key={w.id}
+                    wage={w}
+                    userName={
+                      userOptions.find((u) => u.id === w.user_id)?.name ??
+                      w.user_id ??
+                      "—"
+                    }
+                    currencyCode={currencyCode}
+                  />
                 ),
               )
             )}
