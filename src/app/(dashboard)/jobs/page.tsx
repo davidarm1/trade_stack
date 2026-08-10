@@ -218,6 +218,7 @@ export default async function Page({
   const params = await searchParams;
   const statusFilter = params.status ?? "";
   const searchQuery = params.q?.trim() ?? "";
+  const searchMode = searchQuery.length > 0;
   type RangeParam = "today" | "week" | "future" | "pastdue";
   const rawRange = params.range;
   const range: RangeParam =
@@ -280,10 +281,13 @@ export default async function Page({
     }
   }
 
-  const statusFiltered = (rows ?? []).filter((j) => {
-    if (!statusFilter) return true;
-    return ((j as { status?: string | null }).status ?? "") === statusFilter;
-  });
+  const allRows = rows ?? [];
+  const statusFiltered = searchMode
+    ? allRows
+    : allRows.filter((j) => {
+        if (!statusFilter) return true;
+        return ((j as { status?: string | null }).status ?? "") === statusFilter;
+      });
 
   const payRow = (j: unknown) => j as JobPayFields;
   const activeWorkStatuses = new Set(["open", "in_progress", "scheduled"]);
@@ -347,14 +351,16 @@ export default async function Page({
   const weekTotal = formatCurrency(sumJobAmounts(weekJobs as JobPayFields[]), currencyCode);
   const futureTotal = formatCurrency(sumJobAmounts(futureJobs as JobPayFields[]), currencyCode);
 
-  const payFiltered =
-    pay === "work"
+  const payFiltered = searchMode
+    ? statusFiltered
+    : pay === "work"
       ? []
       : statusFiltered.filter((j) => matchesPayTab(payRow(j), pay));
 
   // Build the display list
-  let list: JobsTableRow[] =
-    pay === "work"
+  let list: JobsTableRow[] = searchMode
+    ? (statusFiltered as JobsTableRow[])
+    : pay === "work"
       ? range === "today"
         ? todayJobs
         : range === "future"
@@ -365,7 +371,7 @@ export default async function Page({
       : (payFiltered as JobsTableRow[]);
 
   // Overdue tab: filter out resolved, apply followup bucket filter, then sort
-  if (pay === "overdue" && isOfficeOrOwner) {
+  if (!searchMode && pay === "overdue" && isOfficeOrOwner) {
     list = list.filter((j) => {
       const f = followupMap.get(j.id) ?? null;
       return f?.status !== "resolved";
@@ -380,9 +386,9 @@ export default async function Page({
     list = sortOverdueList(list, followupMap);
   }
 
-  const totalRows = (rows ?? []).length;
+  const totalRows = statusFiltered.length;
 
-  const isPastDueTab = pay === "work" && range === "pastdue";
+  const isPastDueTab = !searchMode && pay === "work" && range === "pastdue";
 
   // Past due tab: oldest first
   if (isPastDueTab) {
@@ -393,8 +399,8 @@ export default async function Page({
     });
   }
 
-  const isOverdueTab = pay === "overdue";
-  const isOutstandingTab = pay === "outstanding";
+  const isOverdueTab = !searchMode && pay === "overdue";
+  const isOutstandingTab = !searchMode && pay === "outstanding";
   const showDfiColumn = isOutstandingTab;
   const showDaysOverdueColumn = isOverdueTab;
   const showNextActionColumn = isOverdueTab && isOfficeOrOwner;
@@ -417,9 +423,9 @@ export default async function Page({
     emptyMessage = searchQuery
       ? "No jobs match your search."
       : "No jobs yet. Create one to get started.";
-  } else if (statusFiltered.length === 0) {
+  } else if (!searchMode && statusFiltered.length === 0) {
     emptyMessage = "No jobs match this status filter.";
-  } else if (pay === "work" && list.length === 0) {
+  } else if (!searchMode && pay === "work" && list.length === 0) {
     emptyMessage =
       range === "today"
         ? "No jobs scheduled for today."
@@ -428,7 +434,7 @@ export default async function Page({
           : range === "pastdue"
             ? "No past-due jobs — all scheduled work is up to date."
             : "No active jobs this week.";
-  } else if (payFiltered.length === 0 && pay !== "work") {
+  } else if (!searchMode && payFiltered.length === 0 && pay !== "work") {
     emptyMessage =
       pay === "todo"
         ? "No jobs waiting to be invoiced."
@@ -470,6 +476,11 @@ export default async function Page({
         >
           <JobsSearch />
         </Suspense>
+        {searchMode ? (
+          <p className="text-sm text-blue-700">
+            Search is matching all jobs, including closed jobs, and ignores the tabs below.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

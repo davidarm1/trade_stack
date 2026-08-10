@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { parsePayTab } from "@/lib/jobs-payment-buckets";
 
 export function JobsSearch() {
   const router = useRouter();
@@ -20,14 +19,12 @@ export function JobsSearch() {
       const next = value.trim();
       if (next === urlQ.trim()) return;
 
-      const p = new URLSearchParams(currentQueryString);
-      if (next) p.set("q", next);
-      else p.delete("q");
-      if (!p.get("range")) p.set("range", "week");
-      if (!p.get("pay")) p.set("pay", parsePayTab(undefined));
-      const nextQueryString = p.toString();
-      if (nextQueryString === currentQueryString) return;
-      router.replace(`/jobs?${nextQueryString}`);
+      const nextHref = next
+        ? `/jobs?q=${encodeURIComponent(next)}`
+        : "/jobs";
+      const currentHref = currentQueryString ? `/jobs?${currentQueryString}` : "/jobs";
+      if (nextHref === currentHref) return;
+      router.replace(nextHref);
     }, 300);
     return () => clearTimeout(t);
   }, [value, urlQ, router, currentQueryString]);
