@@ -50,6 +50,7 @@ export default async function EditJobPage({
     legacy_ref: string | null;
     job_number: number | null;
     invoice_sent_at: string | null;
+    signature_required: boolean | null;
   };
 
   return (
@@ -85,6 +86,7 @@ export default async function EditJobPage({
           custom_po_number: job.custom_po_number,
           legacy_ref: job.legacy_ref,
           invoice_sent_at: job.invoice_sent_at,
+          signature_required: job.signature_required,
         }}
         engineers={engineers}
       />

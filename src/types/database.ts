@@ -117,6 +117,7 @@ export interface Job {
   payment_status: string | null;
   sent_to_debt_collection_at: string | null;
   overdue_comment: string | null;
+  signature_required: boolean | null;
   notes: string | null;
   parent_job_id: string | null;
   source_quote_id: string | null;

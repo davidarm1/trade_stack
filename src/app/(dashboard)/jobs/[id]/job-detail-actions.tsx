@@ -15,6 +15,7 @@ export function JobDetailActions({
   signedAt,
   approvedAt,
   invoiceSentAt,
+  signatureRequired: signatureRequiredProp,
   invoiceVersionCount,
   initialInvoiceRecipients,
   isPaid,
@@ -29,6 +30,7 @@ export function JobDetailActions({
   signedAt: string | null;
   approvedAt: string | null;
   invoiceSentAt: string | null;
+  signatureRequired: boolean | null;
   invoiceVersionCount: number;
   initialInvoiceRecipients: string;
   isPaid: boolean;
@@ -55,11 +57,12 @@ export function JobDetailActions({
   const approvedDone = Boolean(approvedAt?.trim());
   const invoiceDone = Boolean(invoiceSentAt?.trim());
   const paidDone = isPaid;
+  const signatureRequired = signatureRequiredProp ?? true;
 
   const sendEnabled = !sentDone && hasEngineer;
   const setEngineerEnabled = sentDone && !engineerAssigned && hasEngineer;
   const engineerCompleteEnabled =
-    sentDone && !engineerCompletedDone && signatureDone;
+    sentDone && !engineerCompletedDone && (!signatureRequired || signatureDone);
   const approveEnabled = engineerCompletedDone && !approvedDone;
   const invoiceEnabled = approvedDone;
   const previewInvoiceEnabled = approvedDone;
@@ -73,6 +76,86 @@ export function JobDetailActions({
     "rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50";
   const blockedBtn =
     "rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400";
+  const workflowStages = [
+    {
+      key: "engineer",
+      label: "Set Engineer",
+      state: engineerAssigned ? "done" : hasEngineer ? "current" : "blocked",
+      detail: engineerAssigned
+        ? "Engineer assigned"
+        : hasEngineer
+          ? "Ready to assign"
+          : "Pick an engineer",
+    },
+    {
+      key: "send",
+      label: "Send to Engineer",
+      state: sentDone ? "done" : engineerAssigned ? "current" : "blocked",
+      detail: sentDone
+        ? "Sent"
+        : engineerAssigned
+          ? "Ready to send"
+          : "Assign first",
+    },
+    {
+      key: "signature",
+      label: signatureRequired
+        ? "Waiting for Client Signature"
+        : "Signature Not Required",
+      state: signatureRequired
+        ? signatureDone
+          ? "done"
+          : sentDone
+            ? "current"
+            : "blocked"
+        : "skipped",
+      detail: signatureRequired
+        ? signatureDone
+          ? "Client signed"
+          : "Waiting on client"
+        : "Engineer can finish without signature",
+    },
+    {
+      key: "approve",
+      label: "Approve",
+      state: approvedDone
+        ? "done"
+        : engineerCompletedDone
+          ? "current"
+          : "blocked",
+      detail: approvedDone
+        ? "Approved"
+        : engineerCompletedDone
+          ? "Ready to approve"
+          : "Waiting for engineer completion",
+    },
+    {
+      key: "preview",
+      label: "Preview Invoice PDF",
+      state: previewInvoiceEnabled ? "ready" : "blocked",
+      detail: previewInvoiceEnabled ? "Available now" : "Unlocks after approval",
+    },
+    {
+      key: "invoice",
+      label: "Send Invoice",
+      state: invoiceDone ? "done" : invoiceEnabled ? "current" : "blocked",
+      detail: invoiceDone
+        ? "Invoice sent"
+        : invoiceEnabled
+          ? "Ready to send"
+          : "Needs approval",
+    },
+    {
+      key: "paid",
+      label: "Mark Paid",
+      state: paidDone ? "done" : paidEnabled ? "current" : "blocked",
+      detail: paidDone
+        ? "Marked paid"
+        : paidEnabled
+          ? "Ready to mark paid"
+          : "Awaiting sent invoice",
+    },
+  ] as const;
 
   async function patch(
     key: string,
@@ -119,6 +202,41 @@ export function JobDetailActions({
 
   return (
     <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
+        {workflowStages.map((stage) => {
+          const state = stage.state;
+          const done = state === "done";
+          const current = state === "current";
+          const ready = state === "ready";
+          const skipped = state === "skipped";
+          const chipClass = done
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : current
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : ready
+                ? "border-sky-200 bg-sky-50 text-sky-800"
+                : skipped
+                  ? "border-violet-200 bg-violet-50 text-violet-800"
+                  : "border-slate-200 bg-slate-50 text-slate-400";
+          const dot = done ? "✓" : ready ? "↗" : skipped ? "↷" : current ? "•" : "·";
+          return (
+            <div
+              key={stage.key}
+              className={`rounded-lg border px-3 py-2 text-xs shadow-sm ${chipClass}`}
+            >
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-current px-1 text-[10px] font-semibold leading-none">
+                  {dot}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-semibold">{stage.label}</p>
+                  <p className="mt-0.5 text-[11px] opacity-80">{stage.detail}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
       <div className="flex flex-wrap gap-2">
         <select
           value={selectedEngineerId}
@@ -207,9 +325,9 @@ export function JobDetailActions({
         >
           {engineerCompletedDone
             ? "Completed by Engineer"
-            : signatureDone
-              ? "Mark Completed by Engineer"
-              : "Waiting for Client Signature"}
+            : signatureRequired && !signatureDone
+              ? "Waiting for Client Signature"
+              : "Mark Completed by Engineer"}
         </button>
         <button
           type="button"

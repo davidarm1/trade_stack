@@ -23,6 +23,7 @@ type EditJobInitial = {
   custom_po_number: string | null;
   legacy_ref: string | null;
   invoice_sent_at: string | null;
+  signature_required: boolean | null;
 };
 
 const STATUS_OPTIONS = [
@@ -79,6 +80,7 @@ export function EditJobForm({
       payment_terms_days: asNullableNumber("payment_terms_days"),
       custom_po_number: asNullableText("custom_po_number"),
       legacy_ref: asNullableText("legacy_ref"),
+      signature_required: form.get("signature_required") === "on",
     });
 
     setPending(false);
@@ -137,6 +139,21 @@ export function EditJobForm({
           ))}
         </select>
       </div>
+
+      <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+        <input
+          name="signature_required"
+          type="checkbox"
+          defaultChecked={initial.signature_required ?? true}
+          className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
+        />
+        <span>
+          <span className="block font-medium text-slate-900">Client signature required</span>
+          <span className="block text-xs text-slate-500">
+            If unticked, the job can move past engineer completion without waiting for a signature.
+          </span>
+        </span>
+      </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

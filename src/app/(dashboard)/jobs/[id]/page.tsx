@@ -94,6 +94,7 @@ export default async function Page({
     title?: string | null;
     status?: string | null;
     payment_status?: string | null;
+    signature_required?: boolean | null;
     description?: string | null;
     site_address1?: string | null;
     site_address2?: string | null;
@@ -234,6 +235,7 @@ export default async function Page({
           signedAt={typeof j.signed_at === "string" ? j.signed_at : null}
           approvedAt={j.approved_at ?? null}
           invoiceSentAt={j.invoice_sent_at ?? null}
+          signatureRequired={j.signature_required ?? true}
           invoiceVersionCount={invoiceVersions.length}
           initialInvoiceRecipients={initialInvoiceRecipients}
           isPaid={String(j.payment_status ?? "").toLowerCase() === "paid"}
