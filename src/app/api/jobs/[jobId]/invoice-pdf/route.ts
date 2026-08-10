@@ -141,7 +141,15 @@ export async function GET(
     .filter(Boolean);
 
   const clientName = text(client?.company_name ?? client?.contact_name);
-  const clientAddressLines = [
+  const billingAddressLines = [
+    client?.address1,
+    client?.address2,
+    client?.town,
+    client?.postcode,
+  ]
+    .map((p) => String(p ?? "").trim())
+    .filter(Boolean);
+  const siteAddressLines = [
     job.site_address1 ?? client?.site_address1 ?? client?.address1,
     job.site_address2 ?? client?.site_address2 ?? client?.address2,
     job.site_town ?? client?.site_town ?? client?.town,
@@ -272,38 +280,26 @@ export async function GET(
   });
   y -= 20;
 
-  // BILL TO SECTION
+  // BILL TO / SITE SECTION
   page.drawText("Bill To", { x: margin, y, size: 11, font: bold, color: NAVY });
-  page.drawText("From", { x: width / 2 + 12, y, size: 11, font: bold, color: NAVY });
+  page.drawText("Site", { x: width / 2 + 12, y, size: 11, font: bold, color: NAVY });
   y -= 14;
   const nameRowY = y;
   page.drawText(clientName, { x: margin, y: nameRowY, size: 10, font: bold, color: TEXT });
-  const fromColX = width / 2 + 12;
-  let fromLineY = nameRowY;
-
-  // "From" is always a plain postal block (no logo / no branding toggles).
-  if (companyName) {
-    page.drawText(companyName, {
-      x: fromColX,
-      y: fromLineY,
-      size: 10,
-      font: bold,
-      color: ORANGE,
-    });
-    fromLineY -= 12;
-  }
-  for (const line of companyDetailLines.slice(0, 5)) {
-    page.drawText(line, { x: fromColX, y: fromLineY, size: 9, font, color: TEXT });
-    fromLineY -= 11;
+  const siteColX = width / 2 + 12;
+  let siteLineY = nameRowY;
+  for (const line of siteAddressLines.slice(0, 4)) {
+    page.drawText(line, { x: siteColX, y: siteLineY, size: 9, font, color: TEXT });
+    siteLineY -= 11;
   }
 
   let leftY = nameRowY - 12;
-  for (const line of clientAddressLines.slice(0, 4)) {
+  for (const line of billingAddressLines.slice(0, 4)) {
     page.drawText(line, { x: margin, y: leftY, size: 9, font, color: TEXT });
     leftY -= 11;
   }
 
-  y = Math.min(leftY, fromLineY) - 22;
+  y = Math.min(leftY, siteLineY) - 22;
 
   // LINE ITEMS TABLE
   const tableX = margin;

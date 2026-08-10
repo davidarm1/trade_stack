@@ -77,8 +77,18 @@ export async function buildStoredInvoicePdf(args: {
     .map((v) => String(v || "").trim())
     .filter(Boolean);
 
-  const billTo = [
+  const billingTo = [
     client?.company_name || client?.contact_name || "",
+    client?.address1 || "",
+    client?.address2 || "",
+    [client?.town || "", client?.postcode || ""]
+      .filter(Boolean)
+      .join(" "),
+  ]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+
+  const siteTo = [
     job.site_address1 || client?.site_address1 || client?.address1 || "",
     job.site_address2 || client?.site_address2 || client?.address2 || "",
     [job.site_town || client?.site_town || client?.town || "", job.site_postcode || client?.site_postcode || client?.postcode || ""]
@@ -189,9 +199,17 @@ export async function buildStoredInvoicePdf(args: {
   y = 684;
   page.drawText("Bill To", { x: margin, y, size: 12, font: bold, color: NAVY });
   let by = y - 18;
-  for (const l of billTo.slice(0, 6)) {
+  for (const l of billingTo.slice(0, 6)) {
     page.drawText(l, { x: margin, y: by, size: 10, font, color: TEXT });
     by -= 14;
+  }
+
+  const siteX = 320;
+  page.drawText("Site", { x: siteX, y, size: 12, font: bold, color: NAVY });
+  let sy = y - 18;
+  for (const l of siteTo.slice(0, 6)) {
+    page.drawText(l, { x: siteX, y: sy, size: 10, font, color: TEXT });
+    sy -= 14;
   }
 
   y = 572;

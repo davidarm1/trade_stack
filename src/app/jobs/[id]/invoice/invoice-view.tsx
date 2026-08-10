@@ -28,10 +28,14 @@ export function InvoiceView({
     dueDate: string;
     jobReference: string;
     clientName: string;
-    clientAddress1: string;
-    clientAddress2: string;
-    clientTown: string;
-    clientPostcode: string;
+    billingAddress1: string;
+    billingAddress2: string;
+    billingTown: string;
+    billingPostcode: string;
+    siteAddress1: string;
+    siteAddress2: string;
+    siteTown: string;
+    sitePostcode: string;
     currency: string;
     subtotal: number;
     vatAmount: number;
@@ -62,11 +66,16 @@ export function InvoiceView({
   ].filter(Boolean);
   /** Postal-style block (not affected by header logo/name branding). */
   const fromAddressLines = [invoice.companyName, ...detailLines].filter(Boolean);
-  const billLines = [
+  const billingLines = [
     invoice.clientName,
-    invoice.clientAddress1,
-    invoice.clientAddress2,
-    [invoice.clientTown, invoice.clientPostcode].filter(Boolean).join(" "),
+    invoice.billingAddress1,
+    invoice.billingAddress2,
+    [invoice.billingTown, invoice.billingPostcode].filter(Boolean).join(" "),
+  ].filter(Boolean);
+  const siteLines = [
+    invoice.siteAddress1,
+    invoice.siteAddress2,
+    [invoice.siteTown, invoice.sitePostcode].filter(Boolean).join(" "),
   ].filter(Boolean);
 
   async function onDownload() {
@@ -145,7 +154,7 @@ export function InvoiceView({
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Bill To</h2>
             <div className="mt-2 space-y-1">
-              {billLines.map((line, i) => (
+              {billingLines.map((line, i) => (
                 <p key={i} className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-600"}`}>
                   {line}
                 </p>
@@ -153,13 +162,10 @@ export function InvoiceView({
             </div>
           </div>
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">From</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Site</h2>
             <div className="mt-2 space-y-1">
-              {fromAddressLines.map((line, i) => (
-                <p
-                  key={i}
-                  className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-600"}`}
-                >
+              {siteLines.map((line, i) => (
+                <p key={i} className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-600"}`}>
                   {line}
                 </p>
               ))}

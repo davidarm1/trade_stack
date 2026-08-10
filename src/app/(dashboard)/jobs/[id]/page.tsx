@@ -154,6 +154,10 @@ export default async function Page({
             id: u.id,
             name: u.name ?? u.email ?? u.id,
           }));
+  const billingAddress =
+    [j.clients?.address1, j.clients?.address2, j.clients?.town, j.clients?.postcode]
+      .filter(Boolean)
+      .join(", ") || "—";
   const siteAddress =
     [j.site_address1, j.site_address2, j.site_town, j.site_postcode]
       .filter(Boolean)
@@ -291,6 +295,10 @@ export default async function Page({
                     <span className="text-slate-500">({j.engineer.email})</span>
                   ) : null}
                 </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-slate-500">Billing address</dt>
+                <dd className="text-slate-900">{billingAddress}</dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-slate-500">Site</dt>

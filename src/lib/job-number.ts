@@ -28,7 +28,13 @@ export function jobMatchesSearch(
     description?: string | null;
     legacy_ref?: string | null;
     job_number?: number | null;
+    custom_invoice_number?: string | null;
     custom_po_number?: string | null;
+    client_name?: string | null;
+    site_address1?: string | null;
+    site_address2?: string | null;
+    site_town?: string | null;
+    site_postcode?: string | null;
   },
   rawQuery: string,
 ): boolean {
@@ -39,7 +45,13 @@ export function jobMatchesSearch(
   if (hay(job.title).includes(q)) return true;
   if (hay(job.description).includes(q)) return true;
   if (hay(job.legacy_ref).includes(q)) return true;
+  if (hay(job.custom_invoice_number).includes(q)) return true;
   if (hay(job.custom_po_number).includes(q)) return true;
+  if (hay(job.client_name).includes(q)) return true;
+  if (hay(job.site_address1).includes(q)) return true;
+  if (hay(job.site_address2).includes(q)) return true;
+  if (hay(job.site_town).includes(q)) return true;
+  if (hay(job.site_postcode).includes(q)) return true;
   if (job.job_number != null && String(job.job_number).includes(q)) return true;
   if (job.id.toLowerCase().includes(q)) return true;
   const compactId = job.id.replace(/-/g, "").toLowerCase();
