@@ -59,8 +59,6 @@ export function JobDetailActions({
   const paidDone = isPaid;
   const signatureRequired = signatureRequiredProp ?? true;
 
-  const sendEnabled = !sentDone && hasEngineer;
-  const setEngineerEnabled = sentDone && !engineerAssigned && hasEngineer;
   const engineerCompleteEnabled =
     sentDone && !engineerCompletedDone && (!signatureRequired || signatureDone);
   const approveEnabled = engineerCompletedDone && !approvedDone;
@@ -79,23 +77,13 @@ export function JobDetailActions({
   const workflowStages = [
     {
       key: "engineer",
-      label: "Set Engineer",
+      label: "Engineer Assigned",
       state: engineerAssigned ? "done" : hasEngineer ? "current" : "blocked",
       detail: engineerAssigned
         ? "Engineer assigned"
         : hasEngineer
-          ? "Ready to assign"
+          ? "Ready to save"
           : "Pick an engineer",
-    },
-    {
-      key: "send",
-      label: "Send to Engineer",
-      state: sentDone ? "done" : engineerAssigned ? "current" : "blocked",
-      detail: sentDone
-        ? "Sent"
-        : engineerAssigned
-          ? "Ready to send"
-          : "Assign first",
     },
     {
       key: "signature",
@@ -262,45 +250,21 @@ export function JobDetailActions({
         </button>
         <button
           type="button"
-          disabled={busyKey !== null || !setEngineerEnabled}
-          className={setEngineerEnabled ? readyBtn : blockedBtn}
+          disabled={busyKey !== null || !hasEngineer}
+          className={hasEngineer ? readyBtn : blockedBtn}
           onClick={() =>
             patch(
-              "set_engineer",
-              {
-                assigned_engineer_id: selectedEngineerId,
-              },
-              "Engineer assigned for this sent job.",
-            )
-          }
-        >
-          {busyKey === "set_engineer" ? "Saving..." : "Set Engineer"}
-        </button>
-        <button
-          type="button"
-          disabled={busyKey !== null || !sendEnabled}
-          className={sentDone ? doneBtn : sendEnabled ? readyBtn : blockedBtn}
-          onClick={() => {
-            if (!selectedEngineerId) {
-              setMsg("Pick an engineer before sending this job.");
-              return;
-            }
-            void patch(
-              "send",
+              "save_engineer",
               {
                 assigned_engineer_id: selectedEngineerId,
                 sent_to_engineer_at: new Date().toISOString(),
                 status: "in_progress",
               },
-              "Assigned and sent to engineer.",
-            );
-          }}
+              "Engineer saved to the job.",
+            )
+          }
         >
-          {busyKey === "send"
-            ? "Sending..."
-            : sentDone
-              ? "Sent to Engineer"
-              : "Send to Engineer"}
+          {busyKey === "save_engineer" ? "Saving..." : "Save engineer"}
         </button>
         <button
           type="button"
