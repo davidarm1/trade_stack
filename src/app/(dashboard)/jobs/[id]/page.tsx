@@ -87,6 +87,7 @@ export default async function Page({
   const { job, materials, completion, images, receipts } = data;
   const j = job as Record<string, unknown> & {
     id: string;
+    client_id?: string | null;
     job_number?: number | null;
     legacy_ref?: string | null;
     custom_po_number?: string | null;
@@ -162,6 +163,16 @@ export default async function Page({
     [j.site_address1, j.site_address2, j.site_town, j.site_postcode]
       .filter(Boolean)
       .join(", ") || "—";
+  const addressInitial = {
+    billing_address1: String(j.clients?.address1 ?? ""),
+    billing_address2: String(j.clients?.address2 ?? ""),
+    billing_town: String(j.clients?.town ?? ""),
+    billing_postcode: String(j.clients?.postcode ?? ""),
+    site_address1: String(j.site_address1 ?? j.clients?.site_address1 ?? j.clients?.address1 ?? ""),
+    site_address2: String(j.site_address2 ?? j.clients?.site_address2 ?? j.clients?.address2 ?? ""),
+    site_town: String(j.site_town ?? j.clients?.site_town ?? j.clients?.town ?? ""),
+    site_postcode: String(j.site_postcode ?? j.clients?.site_postcode ?? j.clients?.postcode ?? ""),
+  };
 
   const money = (n: unknown) =>
     typeof n === "number" && Number.isFinite(n)
@@ -424,6 +435,8 @@ export default async function Page({
           currentInvoiceUrl={b2DownloadPathFromStoredValue(currentInvoiceVersion?.public_url)}
           currentJobSheetUrl={b2DownloadPathFromStoredValue(j.jobsheet_url)}
           invoiceVersions={invoiceVersions}
+          clientId={j.client_id ?? null}
+          addressInitial={addressInitial}
           initial={{
             custom_invoice_number: j.custom_invoice_number ?? null,
             custom_po_number: j.custom_po_number ?? null,

@@ -151,21 +151,27 @@ export function InvoiceView({
         </header>
 
         <section className="mt-8 grid grid-cols-2 gap-8">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Bill To</h2>
-            <div className="mt-2 space-y-1">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bill To</h2>
+            <div className="mt-3 space-y-1">
               {billingLines.map((line, i) => (
-                <p key={i} className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-600"}`}>
+                <p
+                  key={i}
+                  className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-700"}`}
+                >
                   {line}
                 </p>
               ))}
             </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Site</h2>
-            <div className="mt-2 space-y-1">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Site</h2>
+            <div className="mt-3 space-y-1">
               {siteLines.map((line, i) => (
-                <p key={i} className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-600"}`}>
+                <p
+                  key={i}
+                  className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-700"}`}
+                >
                   {line}
                 </p>
               ))}

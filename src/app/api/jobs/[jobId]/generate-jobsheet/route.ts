@@ -278,38 +278,61 @@ async function buildJobSheetPdf(args: {
   // ── CLIENT / JOB DETAILS ─────────────────────────────────────────────────
   const rightColX = MID + 10;
 
-  page.drawText("CLIENT", { x: MARGIN, y, size: 11, font: bold, color: NAVY });
-  page.drawText("JOB DETAILS", { x: rightColX, y, size: 11, font: bold, color: NAVY });
-  y -= 15;
-
-  // Left: client name + site address
   const clientName = opt(client?.company_name ?? client?.contact_name) ?? "—";
-  let leftY = y;
-  page.drawText(clientName, { x: MARGIN, y: leftY, size: 10, font: bold, color: TEXT });
-  leftY -= 13;
-
   const siteLines = [
     job.site_address1 ?? client?.site_address1 ?? client?.address1,
     job.site_address2 ?? client?.site_address2 ?? client?.address2,
     job.site_town ?? client?.site_town ?? client?.town,
     job.site_postcode ?? client?.site_postcode ?? client?.postcode,
   ].map((p) => String(p ?? "").trim()).filter(Boolean);
+
+  const sectionTop = y;
+  const leftBoxW = MID - MARGIN - 6;
+  const rightBoxW = PAGE_W - rightColX - MARGIN;
+  const boxHeight = 18 + Math.max(siteLines.length + 1, 5) * 11 + 10;
+  const boxFill = rgb(0.97, 0.98, 0.99);
+
+  page.drawRectangle({
+    x: MARGIN,
+    y: sectionTop - boxHeight,
+    width: leftBoxW,
+    height: boxHeight,
+    color: boxFill,
+    borderColor: BORDER,
+    borderWidth: 1,
+  });
+  page.drawRectangle({
+    x: rightColX,
+    y: sectionTop - boxHeight,
+    width: rightBoxW,
+    height: boxHeight,
+    color: boxFill,
+    borderColor: BORDER,
+    borderWidth: 1,
+  });
+
+  page.drawText("CLIENT", { x: MARGIN + 8, y: sectionTop - 14, size: 11, font: bold, color: NAVY });
+  page.drawText("JOB DETAILS", { x: rightColX + 8, y: sectionTop - 14, size: 11, font: bold, color: NAVY });
+
+  let leftY = sectionTop - 28;
+  page.drawText(clientName, { x: MARGIN + 8, y: leftY, size: 10, font: bold, color: TEXT });
+  leftY -= 11;
   for (const line of siteLines.slice(0, 4)) {
-    page.drawText(line, { x: MARGIN, y: leftY, size: 9, font, color: TEXT });
+    page.drawText(line, { x: MARGIN + 8, y: leftY, size: 9, font, color: TEXT });
     leftY -= 11;
   }
   if (client?.contact_name && client.contact_name !== (client?.company_name ?? "")) {
-    page.drawText(`Contact: ${client.contact_name}`, { x: MARGIN, y: leftY, size: 9, font, color: TEXT });
+    page.drawText(`Contact: ${client.contact_name}`, { x: MARGIN + 8, y: leftY, size: 9, font, color: TEXT });
     leftY -= 11;
   }
   if (client?.contact_number) {
-    page.drawText(`Tel: ${client.contact_number}`, { x: MARGIN, y: leftY, size: 9, font, color: TEXT });
+    page.drawText(`Tel: ${client.contact_number}`, { x: MARGIN + 8, y: leftY, size: 9, font, color: TEXT });
     leftY -= 11;
   }
 
   // Right: job meta rows
   const metaValueX = rightColX + 84;
-  let rightY = y;
+  let rightY = sectionTop - 28;
   const metaRows: [string, string | null][] = [
     ["Date on site:", opt(job.date_onsite)],
     ["Time:", opt(job.time_onsite)],
@@ -319,12 +342,12 @@ async function buildJobSheetPdf(args: {
   ];
   for (const [label, value] of metaRows) {
     if (!value) continue;
-    page.drawText(label, { x: rightColX, y: rightY, size: 9, font: bold, color: NAVY });
+    page.drawText(label, { x: rightColX + 8, y: rightY, size: 9, font: bold, color: NAVY });
     page.drawText(value, { x: metaValueX, y: rightY, size: 9, font, color: TEXT });
     rightY -= 13;
   }
 
-  y = Math.min(leftY, rightY) - 14;
+  y = sectionTop - boxHeight - 14;
   rule();
   y -= 16;
 

@@ -126,24 +126,24 @@ export function JobSheetView(props: JobSheetViewProps) {
 
         {/* ── Client / Job meta ── */}
         <section className="mt-6 grid grid-cols-2 gap-8 border-b border-slate-200 pb-6">
-          <div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[#1a2e4a]">Client</h2>
-            <div className="mt-2 space-y-1">
+            <div className="mt-3 space-y-1">
               <p className="text-sm font-semibold text-slate-900">{clientName || "—"}</p>
               {siteLines.map((line, i) => (
-                <p key={i} className="text-sm text-slate-600">{line}</p>
+                <p key={i} className="text-sm text-slate-700">{line}</p>
               ))}
               {contactName ? (
-                <p className="text-sm text-slate-600">Contact: {contactName}</p>
+                <p className="text-sm text-slate-700">Contact: {contactName}</p>
               ) : null}
               {contactNumber ? (
-                <p className="text-sm text-slate-600">Tel: {contactNumber}</p>
+                <p className="text-sm text-slate-700">Tel: {contactNumber}</p>
               ) : null}
             </div>
           </div>
-          <div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[#1a2e4a]">Job Details</h2>
-            <dl className="mt-2 space-y-1">
+            <dl className="mt-3 space-y-1">
               {metaRows.map(([label, value]) => (
                 <div key={label} className="flex gap-2 text-sm">
                   <dt className="w-28 shrink-0 font-medium text-[#1a2e4a]">{label}:</dt>

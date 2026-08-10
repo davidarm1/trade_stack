@@ -281,25 +281,51 @@ export async function GET(
   y -= 20;
 
   // BILL TO / SITE SECTION
-  page.drawText("Bill To", { x: margin, y, size: 11, font: bold, color: NAVY });
-  page.drawText("Site", { x: width / 2 + 12, y, size: 11, font: bold, color: NAVY });
-  y -= 14;
-  const nameRowY = y;
-  page.drawText(clientName, { x: margin, y: nameRowY, size: 10, font: bold, color: TEXT });
-  const siteColX = width / 2 + 12;
-  let siteLineY = nameRowY;
-  for (const line of siteAddressLines.slice(0, 4)) {
-    page.drawText(line, { x: siteColX, y: siteLineY, size: 9, font, color: TEXT });
-    siteLineY -= 11;
-  }
+  const sectionTop = y;
+  const boxGap = 12;
+  const boxWidth = (width - margin * 2 - boxGap) / 2;
+  const boxHeight = 18 + Math.max(billingAddressLines.length + 1, siteAddressLines.length + 1) * 11 + 10;
+  const boxFill = rgb(0.97, 0.98, 0.99);
+  const leftBoxX = margin;
+  const rightBoxX = margin + boxWidth + boxGap;
 
-  let leftY = nameRowY - 12;
+  page.drawRectangle({
+    x: leftBoxX,
+    y: sectionTop - boxHeight,
+    width: boxWidth,
+    height: boxHeight,
+    color: boxFill,
+    borderColor: BORDER,
+    borderWidth: 1,
+  });
+  page.drawRectangle({
+    x: rightBoxX,
+    y: sectionTop - boxHeight,
+    width: boxWidth,
+    height: boxHeight,
+    color: boxFill,
+    borderColor: BORDER,
+    borderWidth: 1,
+  });
+
+  page.drawText("Bill To", { x: leftBoxX + 8, y: sectionTop - 14, size: 11, font: bold, color: NAVY });
+  page.drawText("Site", { x: rightBoxX + 8, y: sectionTop - 14, size: 11, font: bold, color: NAVY });
+
+  let leftY = sectionTop - 28;
+  page.drawText(clientName, { x: leftBoxX + 8, y: leftY, size: 10, font: bold, color: TEXT });
+  leftY -= 11;
   for (const line of billingAddressLines.slice(0, 4)) {
-    page.drawText(line, { x: margin, y: leftY, size: 9, font, color: TEXT });
+    page.drawText(line, { x: leftBoxX + 8, y: leftY, size: 9, font, color: TEXT });
     leftY -= 11;
   }
 
-  y = Math.min(leftY, siteLineY) - 22;
+  let siteLineY = sectionTop - 28;
+  for (const line of siteAddressLines.slice(0, 4)) {
+    page.drawText(line, { x: rightBoxX + 8, y: siteLineY, size: 9, font, color: TEXT });
+    siteLineY -= 11;
+  }
+
+  y = sectionTop - boxHeight - 22;
 
   // LINE ITEMS TABLE
   const tableX = margin;

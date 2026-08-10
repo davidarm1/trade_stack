@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import {
   replaceJobInvoiceMaterials,
+  updateJob,
   updateJobCompletionDetails,
   updateJobInvoiceDetails,
 } from "@/actions/jobs";
+import { updateClient } from "@/actions/clients";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 
 type MaterialRow = {
@@ -27,6 +29,7 @@ type Props = {
     is_current: boolean;
     created_at: string;
   }>;
+  clientId: string | null;
   initial: {
     custom_invoice_number: string | null;
     custom_po_number: string | null;
@@ -34,6 +37,16 @@ type Props = {
     payment_terms_days: number | null;
     labour_charge: number | null;
     materials: MaterialRow[];
+  };
+  addressInitial: {
+    billing_address1: string;
+    billing_address2: string;
+    billing_town: string;
+    billing_postcode: string;
+    site_address1: string;
+    site_address2: string;
+    site_town: string;
+    site_postcode: string;
   };
   jobSheetInitial: {
     work_carried_out: string;
@@ -50,7 +63,9 @@ export function InvoicePreviewPanel({
   currentInvoiceUrl,
   currentJobSheetUrl,
   invoiceVersions,
+  clientId,
   initial,
+  addressInitial,
   jobSheetInitial,
 }: Props) {
   const [activeTab, setActiveTab] = useState<"invoice" | "jobsheet">("invoice");
@@ -77,6 +92,16 @@ export function InvoicePreviewPanel({
     work_carried_out: jobSheetInitial.work_carried_out,
     parts_used: jobSheetInitial.parts_used,
     recommendations: jobSheetInitial.recommendations,
+  });
+  const [addressFields, setAddressFields] = useState({
+    billing_address1: addressInitial.billing_address1,
+    billing_address2: addressInitial.billing_address2,
+    billing_town: addressInitial.billing_town,
+    billing_postcode: addressInitial.billing_postcode,
+    site_address1: addressInitial.site_address1,
+    site_address2: addressInitial.site_address2,
+    site_town: addressInitial.site_town,
+    site_postcode: addressInitial.site_postcode,
   });
 
   const previewUrl = useMemo(
@@ -138,6 +163,31 @@ export function InvoicePreviewPanel({
     if (busy) return;
     setBusy("jobsheet");
     setMsg(null);
+
+    if (clientId) {
+      const billingPayload = {
+        address1: addressFields.billing_address1.trim() || null,
+        address2: addressFields.billing_address2.trim() || null,
+        town: addressFields.billing_town.trim() || null,
+        postcode: addressFields.billing_postcode.trim() || null,
+      };
+      const sitePayload = {
+        site_address1: addressFields.site_address1.trim() || null,
+        site_address2: addressFields.site_address2.trim() || null,
+        site_town: addressFields.site_town.trim() || null,
+        site_postcode: addressFields.site_postcode.trim() || null,
+      };
+      const [billingRes, siteRes] = await Promise.all([
+        updateClient(clientId, billingPayload),
+        updateJob(jobId, sitePayload),
+      ]);
+      if (billingRes.error || siteRes.error) {
+        setBusy(null);
+        setMsg(billingRes.error ?? siteRes.error);
+        return;
+      }
+    }
+
     const { error } = await updateJobCompletionDetails(jobId, {
       work_carried_out: jobSheetFields.work_carried_out,
       parts_used: jobSheetFields.parts_used,
@@ -457,48 +507,146 @@ export function InvoicePreviewPanel({
               className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
               onClick={() => void saveJobSheet()}
             >
-              {busy === "jobsheet" ? "Saving..." : "Save and create job sheet PDF"}
+              {busy === "jobsheet" ? "Saving..." : "Save changes and create job sheet PDF"}
             </button>
           </div>
 
           {showEditor ? (
-            <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-              <label className="block text-xs text-slate-600">
-                Work carried out
-                <textarea
-                  className={`${inputCls} mt-1 min-h-28`}
-                  value={jobSheetFields.work_carried_out}
-                  onChange={(e) =>
-                    setJobSheetFields((f) => ({
-                      ...f,
-                      work_carried_out: e.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="block text-xs text-slate-600">
-                Parts used
-                <textarea
-                  className={`${inputCls} mt-1 min-h-20`}
-                  value={jobSheetFields.parts_used}
-                  onChange={(e) =>
-                    setJobSheetFields((f) => ({ ...f, parts_used: e.target.value }))
-                  }
-                />
-              </label>
-              <label className="block text-xs text-slate-600">
-                Recommendations
-                <textarea
-                  className={`${inputCls} mt-1 min-h-20`}
-                  value={jobSheetFields.recommendations}
-                  onChange={(e) =>
-                    setJobSheetFields((f) => ({ ...f, recommendations: e.target.value }))
-                  }
-                />
-              </label>
+            <div className="mt-3 space-y-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Address details
+                </h4>
+                <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-md border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Billing address
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      <input
+                        className={inputCls}
+                        placeholder="Address line 1"
+                        value={addressFields.billing_address1}
+                        onChange={(e) =>
+                          setAddressFields((f) => ({ ...f, billing_address1: e.target.value }))
+                        }
+                      />
+                      <input
+                        className={inputCls}
+                        placeholder="Address line 2"
+                        value={addressFields.billing_address2}
+                        onChange={(e) =>
+                          setAddressFields((f) => ({ ...f, billing_address2: e.target.value }))
+                        }
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input
+                          className={inputCls}
+                          placeholder="Town"
+                          value={addressFields.billing_town}
+                          onChange={(e) =>
+                            setAddressFields((f) => ({ ...f, billing_town: e.target.value }))
+                          }
+                        />
+                        <input
+                          className={inputCls}
+                          placeholder="Postcode"
+                          value={addressFields.billing_postcode}
+                          onChange={(e) =>
+                            setAddressFields((f) => ({ ...f, billing_postcode: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Site address
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      <input
+                        className={inputCls}
+                        placeholder="Address line 1"
+                        value={addressFields.site_address1}
+                        onChange={(e) =>
+                          setAddressFields((f) => ({ ...f, site_address1: e.target.value }))
+                        }
+                      />
+                      <input
+                        className={inputCls}
+                        placeholder="Address line 2"
+                        value={addressFields.site_address2}
+                        onChange={(e) =>
+                          setAddressFields((f) => ({ ...f, site_address2: e.target.value }))
+                        }
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input
+                          className={inputCls}
+                          placeholder="Town"
+                          value={addressFields.site_town}
+                          onChange={(e) =>
+                            setAddressFields((f) => ({ ...f, site_town: e.target.value }))
+                          }
+                        />
+                        <input
+                          className={inputCls}
+                          placeholder="Postcode"
+                          value={addressFields.site_postcode}
+                          onChange={(e) =>
+                            setAddressFields((f) => ({ ...f, site_postcode: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Job sheet notes
+                </h4>
+                <div className="mt-2 space-y-3">
+                  <label className="block text-xs text-slate-600">
+                    Work carried out
+                    <textarea
+                      className={`${inputCls} mt-1 min-h-28`}
+                      value={jobSheetFields.work_carried_out}
+                      onChange={(e) =>
+                        setJobSheetFields((f) => ({
+                          ...f,
+                          work_carried_out: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs text-slate-600">
+                    Parts used
+                    <textarea
+                      className={`${inputCls} mt-1 min-h-20`}
+                      value={jobSheetFields.parts_used}
+                      onChange={(e) =>
+                        setJobSheetFields((f) => ({ ...f, parts_used: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="block text-xs text-slate-600">
+                    Recommendations
+                    <textarea
+                      className={`${inputCls} mt-1 min-h-20`}
+                      value={jobSheetFields.recommendations}
+                      onChange={(e) =>
+                        setJobSheetFields((f) => ({ ...f, recommendations: e.target.value }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
               <p className="text-xs text-slate-500">
-                Saving updates the office copy of the engineer notes and creates
-                a stored PDF job sheet with the client signature and work photos.
+                Saving updates the client billing address, the job site address, the office copy of the engineer notes, and the stored PDF job sheet.
               </p>
             </div>
           ) : null}
