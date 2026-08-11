@@ -23,6 +23,12 @@ export function InvoiceView({
     companyPostcode: string;
     companyPhone: string;
     companyEmail: string;
+    bankAccountName: string;
+    bankName: string;
+    bankSortCode: string;
+    bankAccountNumber: string;
+    bankIBAN: string;
+    bankSwift: string;
     invoiceNumber: string;
     invoiceDate: string;
     dueDate: string;
@@ -71,6 +77,14 @@ export function InvoiceView({
     invoice.billingAddress1,
     invoice.billingAddress2,
     [invoice.billingTown, invoice.billingPostcode].filter(Boolean).join(" "),
+  ].filter(Boolean);
+  const paymentLines = [
+    invoice.bankAccountName ? `Account name: ${invoice.bankAccountName}` : "",
+    invoice.bankName ? `Bank: ${invoice.bankName}` : "",
+    invoice.bankSortCode ? `Sort code: ${invoice.bankSortCode}` : "",
+    invoice.bankAccountNumber ? `Account number: ${invoice.bankAccountNumber}` : "",
+    invoice.bankIBAN ? `IBAN: ${invoice.bankIBAN}` : "",
+    invoice.bankSwift ? `SWIFT/BIC: ${invoice.bankSwift}` : "",
   ].filter(Boolean);
   const siteLines = [
     invoice.siteAddress1,
@@ -229,6 +243,23 @@ export function InvoiceView({
             <span>{money(invoice.total)}</span>
           </div>
         </section>
+        {paymentLines.length > 0 ? (
+          <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Payment details
+            </h2>
+            <div className="mt-3 space-y-1">
+              {paymentLines.map((line, i) => (
+                <p
+                  key={i}
+                  className={`text-sm ${i === 0 ? "font-semibold text-slate-900" : "text-slate-700"}`}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <footer className="mt-12 border-t border-slate-200 pt-4 text-xs text-slate-500">
           Thank you for your business.
         </footer>

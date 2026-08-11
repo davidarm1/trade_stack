@@ -155,8 +155,7 @@ export function SettingsForm({
     const form = new FormData(e.currentTarget);
 
     const currencyRaw = String(form.get("currency") ?? "").trim().toUpperCase();
-    const currency =
-      /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : "GBP";
+    const currency = /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : "GBP";
 
     const { error: err } = await updateSettings({
       name: String(form.get("name") ?? ""),
@@ -174,6 +173,12 @@ export function SettingsForm({
         ? Number(form.get("default_payment_terms_days"))
         : null,
       invoice_footer_text: String(form.get("invoice_footer_text") ?? "").trim() || null,
+      bank_account_name: String(form.get("bank_account_name") ?? "").trim() || null,
+      bank_name: String(form.get("bank_name") ?? "").trim() || null,
+      bank_sort_code: String(form.get("bank_sort_code") ?? "").trim() || null,
+      bank_account_number: String(form.get("bank_account_number") ?? "").trim() || null,
+      bank_iban: String(form.get("bank_iban") ?? "").trim() || null,
+      bank_swift: String(form.get("bank_swift") ?? "").trim() || null,
     });
 
     setPending(false);
@@ -182,149 +187,212 @@ export function SettingsForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 max-w-2xl space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-slate-700">
-          Company name
-        </label>
-        <input
-          name="name"
-          required
-          defaultValue={tenant?.name ?? ""}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Address line 1
-          </label>
-          <input
-            name="address1"
-            defaultValue={tenant?.address1 ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Address line 2
-          </label>
-          <input
-            name="address2"
-            defaultValue={tenant?.address2 ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Town</label>
-          <input
-            name="town"
-            defaultValue={tenant?.town ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Postcode
-          </label>
-          <input
-            name="postcode"
-            defaultValue={tenant?.postcode ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Phone</label>
-          <input
-            name="phone"
-            defaultValue={tenant?.phone ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Email</label>
-          <input
-            name="email"
-            type="email"
-            defaultValue={tenant?.email ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Currency
-          </label>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Used for amounts across the app — quotes list, new quote, jobs, wages,
-            receipts/outgoings (symbol follows ISO code, e.g. GBP → £).
+    <form onSubmit={handleSubmit} className="mt-8 max-w-5xl space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-slate-900">Company profile</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Contact details used across the app and on printed documents.
           </p>
-          <select
-            name="currency"
-            defaultValue={savedCurrency}
-            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-          >
-            {!STANDARD_CURRENCY_CODES.has(savedCurrency) ? (
-              <option value={savedCurrency}>Current: {savedCurrency}</option>
-            ) : null}
-            {CURRENCY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Default VAT rate (%)
-          </label>
-          <input
-            name="default_vat_rate"
-            type="number"
-            step="0.01"
-            min="0"
-            defaultValue={tenant?.default_vat_rate ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Company name</label>
+            <input
+              name="name"
+              required
+              defaultValue={tenant?.name ?? ""}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Address line 1</label>
+              <input
+                name="address1"
+                defaultValue={tenant?.address1 ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Address line 2</label>
+              <input
+                name="address2"
+                defaultValue={tenant?.address2 ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Town</label>
+              <input
+                name="town"
+                defaultValue={tenant?.town ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Postcode</label>
+              <input
+                name="postcode"
+                defaultValue={tenant?.postcode ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Phone</label>
+              <input
+                name="phone"
+                defaultValue={tenant?.phone ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Email</label>
+              <input
+                name="email"
+                type="email"
+                defaultValue={tenant?.email ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Default payment terms (days)
-          </label>
-          <input
-            name="default_payment_terms_days"
-            type="number"
-            min="0"
-            defaultValue={tenant?.default_payment_terms_days ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700">
-          Invoice footer text
-        </label>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Printed at the bottom of every invoice PDF. Defaults to &ldquo;Thank you for your business.&rdquo; if left blank.
-        </p>
-        <textarea
-          name="invoice_footer_text"
-          rows={2}
-          defaultValue={tenant?.invoice_footer_text ?? ""}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
+      </section>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700">Logo</label>
-        <p className="mt-1 text-xs text-slate-500">
-          JPEG, PNG, WebP or GIF, up to 2&nbsp;MB. Branding options below apply to the app
-          sidebar, mobile header, and the top of printed/HTML invoices only — not the From
-          address block.
-        </p>
-        <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50/80 p-3">
-          <p className="text-xs font-medium text-slate-600">Branding</p>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-slate-900">Invoice defaults</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            These values appear on invoices and job-linked billing documents.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Currency</label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Used for amounts across the app — quotes list, new quote, jobs, wages,
+              receipts/outgoings.
+            </p>
+            <select
+              name="currency"
+              defaultValue={savedCurrency}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              {!STANDARD_CURRENCY_CODES.has(savedCurrency) ? (
+                <option value={savedCurrency}>Current: {savedCurrency}</option>
+              ) : null}
+              {CURRENCY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Default VAT rate (%)</label>
+            <input
+              name="default_vat_rate"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={tenant?.default_vat_rate ?? ""}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Default payment terms (days)</label>
+            <input
+              name="default_payment_terms_days"
+              type="number"
+              min="0"
+              defaultValue={tenant?.default_payment_terms_days ?? ""}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Invoice footer text</label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Printed at the bottom of every invoice PDF. Defaults to “Thank you for your business.” if left blank.
+            </p>
+            <textarea
+              name="invoice_footer_text"
+              rows={3}
+              defaultValue={tenant?.invoice_footer_text ?? ""}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-slate-900">Bank details for invoices</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              These details are pulled into invoices so clients know where to pay.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Account name</label>
+              <input
+                name="bank_account_name"
+                defaultValue={tenant?.bank_account_name ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Bank name</label>
+              <input
+                name="bank_name"
+                defaultValue={tenant?.bank_name ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Sort code</label>
+              <input
+                name="bank_sort_code"
+                defaultValue={tenant?.bank_sort_code ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Account number</label>
+              <input
+                name="bank_account_number"
+                defaultValue={tenant?.bank_account_number ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">IBAN</label>
+              <input
+                name="bank_iban"
+                defaultValue={tenant?.bank_iban ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">SWIFT / BIC</label>
+              <input
+                name="bank_swift"
+                defaultValue={tenant?.bank_swift ?? ""}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-slate-900">Branding</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Logo and company-name controls for the app sidebar and printed invoice headers.
+          </p>
+        </div>
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
           <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -336,7 +404,7 @@ export function SettingsForm({
             <span>
               <span className="font-medium">Show company name</span>
               <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Sidebar, mobile header, and invoice top header only (not the From address).
+                Sidebar, mobile header, and invoice top header only.
               </span>
             </span>
           </label>
@@ -351,14 +419,13 @@ export function SettingsForm({
             <span>
               <span className="font-medium">Show logo</span>
               <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Same as above. Turn on both checkboxes to show logo and name together in those
-                headers only.
+                Turn on both checkboxes to show logo and name together in those headers.
               </span>
             </span>
           </label>
         </div>
         {tenant?.logo_url ? (
-          <div className="mt-3 flex items-start gap-4">
+          <div className="mt-4 flex items-start gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`${tenant.logo_url}${tenant.logo_url.includes("?") ? "&" : "?"}cb=${logoBust}`}
@@ -387,7 +454,7 @@ export function SettingsForm({
             </div>
           </div>
         ) : (
-          <label className="mt-3 inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">
+          <label className="mt-4 inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
@@ -399,14 +466,12 @@ export function SettingsForm({
           </label>
         )}
         {logoError ? (
-          <p
-            className="mt-2 max-w-xl whitespace-pre-wrap break-words text-sm text-red-600"
-            role="alert"
-          >
+          <p className="mt-2 max-w-xl whitespace-pre-wrap break-words text-sm text-red-600" role="alert">
             {logoError}
           </p>
         ) : null}
-      </div>
+      </section>
+
       {error && (
         <p className="text-sm text-red-600" role="alert">
           {error}

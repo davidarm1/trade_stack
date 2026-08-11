@@ -23,6 +23,12 @@ export interface Tenant {
   default_payment_terms_days: number | null;
   currency: string | null;
   invoice_footer_text: string | null;
+  bank_account_name: string | null;
+  bank_name: string | null;
+  bank_sort_code: string | null;
+  bank_account_number: string | null;
+  bank_iban: string | null;
+  bank_swift: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

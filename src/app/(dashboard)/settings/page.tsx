@@ -14,11 +14,13 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        Company profile and defaults for invoices and jobs.
-      </p>
+    <div className="max-w-5xl space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Company profile and defaults for invoices and jobs.
+        </p>
+      </header>
       <SettingsForm
         tenant={data?.tenant ?? null}
         keyValues={data?.keyValues ?? {}}

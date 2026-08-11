@@ -71,6 +71,18 @@ export default async function JobInvoiceStandalonePage({
         companyEmail: String(
           settings.email || settings.company_email || tenant?.email || "",
         ).trim(),
+        bankAccountName: String(
+          settings.bank_account_name || tenant?.bank_account_name || "",
+        ).trim(),
+        bankName: String(settings.bank_name || tenant?.bank_name || "").trim(),
+        bankSortCode: String(
+          settings.bank_sort_code || tenant?.bank_sort_code || "",
+        ).trim(),
+        bankAccountNumber: String(
+          settings.bank_account_number || tenant?.bank_account_number || "",
+        ).trim(),
+        bankIBAN: String(settings.bank_iban || tenant?.bank_iban || "").trim(),
+        bankSwift: String(settings.bank_swift || tenant?.bank_swift || "").trim(),
         invoiceNumber: String(job.custom_invoice_number || `INV-${id.slice(0, 8)}`).trim(),
         invoiceDate: new Date().toLocaleDateString("en-GB"),
         dueDate: new Date(

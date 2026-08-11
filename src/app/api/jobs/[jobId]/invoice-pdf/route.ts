@@ -131,6 +131,14 @@ export async function GET(
     optionalText(settings.email) ??
     optionalText(settings.company_email) ??
     optionalText(tenant?.email);
+  const bankLines = [
+    tenant?.bank_account_name ? `Account name: ${tenant.bank_account_name}` : null,
+    tenant?.bank_name ? `Bank: ${tenant.bank_name}` : null,
+    tenant?.bank_sort_code ? `Sort code: ${tenant.bank_sort_code}` : null,
+    tenant?.bank_account_number ? `Account number: ${tenant.bank_account_number}` : null,
+    tenant?.bank_iban ? `IBAN: ${tenant.bank_iban}` : null,
+    tenant?.bank_swift ? `SWIFT/BIC: ${tenant.bank_swift}` : null,
+  ].filter(Boolean) as string[];
   const companyAddressLines = [
     settings.address_line_1 || settings.company_address1 || tenant?.address1,
     settings.address_line_2 || settings.company_address2 || tenant?.address2,
@@ -515,6 +523,26 @@ export async function GET(
     }`,
     { x: margin, y: footerY + 4, size: 8.5, font, color: TEXT },
   );
+  if (bankLines.length > 0) {
+    const paymentTop = footerY + 48;
+    page.drawText("Payment details", {
+      x: margin,
+      y: paymentTop,
+      size: 10,
+      font: bold,
+      color: NAVY,
+    });
+    bankLines.forEach((line, idx) => {
+      page.drawText(line, {
+        x: margin,
+        y: paymentTop - 14 - idx * 12,
+        size: 9,
+        font,
+        color: TEXT,
+      });
+    });
+  }
+
   const invoiceFooter =
     String(tenant?.invoice_footer_text ?? "").trim() || "Thank you for your business.";
   page.drawText(invoiceFooter, {
