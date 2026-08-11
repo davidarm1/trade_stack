@@ -202,7 +202,7 @@ export async function GET(
   const total = toNumber(job.total_inc_vat, subtotal + vatAmount);
 
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([595.28, 841.89]); // A4
+  let page = pdf.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
   const margin = 42;
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -362,48 +362,59 @@ export async function GET(
   const tableW = width - margin * 2;
   const headerH = 22;
   const rowH = 22;
+  const bottomReserve = 170;
   const itemLeft = tableX + 8;
   const itemMaxW = 260;
   const qtyRight = tableX + 350;
   const unitRight = tableX + 430;
   const lineRight = tableX + tableW - 10;
 
-  page.drawRectangle({
-    x: tableX,
-    y: y - headerH,
-    width: tableW,
-    height: headerH,
-    color: NAVY,
-  });
-  page.drawText("Item", { x: itemLeft, y: y - 14, size: 9, font: bold, color: rgb(1, 1, 1) });
-  drawRightText({
-    text: "Qty",
-    rightX: qtyRight,
-    y: y - 14,
-    size: 9,
-    font: bold,
-    color: rgb(1, 1, 1),
-    page,
-  });
-  drawRightText({
-    text: "Unit Price",
-    rightX: unitRight,
-    y: y - 14,
-    size: 9,
-    font: bold,
-    color: rgb(1, 1, 1),
-    page,
-  });
-  drawRightText({
-    text: "Line Total",
-    rightX: lineRight,
-    y: y - 14,
-    size: 9,
-    font: bold,
-    color: rgb(1, 1, 1),
-    page,
-  });
-  y -= headerH;
+  function drawTableHeader() {
+    page.drawRectangle({
+      x: tableX,
+      y: y - headerH,
+      width: tableW,
+      height: headerH,
+      color: NAVY,
+    });
+    page.drawText("Item", { x: itemLeft, y: y - 14, size: 9, font: bold, color: rgb(1, 1, 1) });
+    drawRightText({
+      text: "Qty",
+      rightX: qtyRight,
+      y: y - 14,
+      size: 9,
+      font: bold,
+      color: rgb(1, 1, 1),
+      page,
+    });
+    drawRightText({
+      text: "Unit Price",
+      rightX: unitRight,
+      y: y - 14,
+      size: 9,
+      font: bold,
+      color: rgb(1, 1, 1),
+      page,
+    });
+    drawRightText({
+      text: "Line Total",
+      rightX: lineRight,
+      y: y - 14,
+      size: 9,
+      font: bold,
+      color: rgb(1, 1, 1),
+      page,
+    });
+    y -= headerH;
+  }
+
+  function addContinuationPage() {
+    page = pdf.addPage([width, height]);
+    y = height - margin;
+    drawTableHeader();
+  }
+
+  drawTableHeader();
 
   const rows = (materials ?? []).length
     ? (materials ?? [])
@@ -417,7 +428,9 @@ export async function GET(
       ];
 
   rows.forEach((row, idx) => {
-    if (y < margin + 190) return;
+    if (y - rowH < margin + bottomReserve) {
+      addContinuationPage();
+    }
     if (idx % 2 === 1) {
       page.drawRectangle({
         x: tableX,
@@ -470,35 +483,9 @@ export async function GET(
     y -= rowH;
   });
 
-  page.drawRectangle({
-    x: tableX,
-    y,
-    width: tableW,
-    height: headerH + rows.length * rowH,
-    borderColor: BORDER,
-    borderWidth: 1,
-  });
-  page.drawLine({
-    start: { x: tableX + 280, y: y },
-    end: { x: tableX + 280, y: y + headerH + rows.length * rowH },
-    thickness: 0.5,
-    color: BORDER,
-  });
-  page.drawLine({
-    start: { x: tableX + 360, y: y },
-    end: { x: tableX + 360, y: y + headerH + rows.length * rowH },
-    thickness: 0.5,
-    color: BORDER,
-  });
-  page.drawLine({
-    start: { x: tableX + 440, y: y },
-    end: { x: tableX + 440, y: y + headerH + rows.length * rowH },
-    thickness: 0.5,
-    color: BORDER,
-  });
+  y -= 26;
 
   // TOTALS SECTION
-  y -= 26;
   const totalsValueRight = width - margin;
   const totalsLabelRight = totalsValueRight - 120;
   const vatLabel = `VAT (${vatRate.toFixed(2).replace(/\.00$/, "")}%)`;
@@ -565,7 +552,10 @@ export async function GET(
     });
   }
 
-  const footerLines = invoiceFooterText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const footerLines = invoiceFooterText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   if (footerLines.length > 0) {
     footerLines.forEach((line, idx) => {
       page.drawText(line, {
