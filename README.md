@@ -2,6 +2,13 @@
 
 Trade Stack is a multi-tenant SaaS starter for field-service businesses: jobs, quotes, clients, receipts, timesheets, wages, and team management. It is built with **Next.js (App Router)**, **Supabase** (Auth + PostgreSQL), and is ready to deploy on **Vercel**.
 
+## Latest amendments
+
+- Job detail top actions now read as a clearer workflow stepper with completed/current/blocked states.
+- Engineer assignment is now a single save action on the job page; the mobile app picks it up from the shared database on refresh.
+- Client signature can be toggled as required or optional per job.
+- Billing and site address editing/layout was tightened up so the two addresses are easier to distinguish.
+
 ## Local setup
 
 1. **Clone or copy** this project and install dependencies:

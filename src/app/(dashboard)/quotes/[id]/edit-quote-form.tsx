@@ -10,6 +10,7 @@ import {
 } from "@/actions/quotes";
 import { getClients, searchClients } from "@/actions/clients";
 import { formatCurrency } from "@/lib/format-currency";
+import { WorkflowStepper, type WorkflowStepperStage } from "@/components/workflow-stepper";
 import {
   QUOTES_VALID_DAYS,
   addDaysToLocalIsoDate,
@@ -222,6 +223,78 @@ export function EditQuoteForm({
     router.refresh();
   }
 
+  const quoteStatus = String(quote.status ?? "pending").trim().toLowerCase();
+  const quoteWorkflowStages: WorkflowStepperStage[] = [
+    {
+      key: "prepare",
+      label: "Prepare quote",
+      state:
+        quoteStatus === "pending" || quoteStatus === "draft" || quoteStatus === "quoted"
+          ? "current"
+          : "done",
+      detail:
+        quoteStatus === "pending" || quoteStatus === "draft" || quoteStatus === "quoted"
+          ? "Review before sending"
+          : "Quote prepared",
+    },
+    {
+      key: "send",
+      label: "Send to customer",
+      state:
+        quoteStatus === "sent"
+          ? "current"
+          : quoteStatus === "accepted" || quoteStatus === "declined" || quoteStatus === "booked"
+            ? "done"
+            : "blocked",
+      detail:
+        quoteStatus === "sent"
+          ? "Waiting on a reply"
+          : quoteStatus === "accepted" || quoteStatus === "declined" || quoteStatus === "booked"
+            ? "Quote sent"
+            : "Send once ready",
+    },
+    {
+      key: "response",
+      label: "Customer response",
+      state:
+        quoteStatus === "sent"
+          ? "current"
+          : quoteStatus === "accepted" || quoteStatus === "declined" || quoteStatus === "booked"
+            ? "done"
+            : "blocked",
+      detail:
+        quoteStatus === "accepted"
+          ? "Accepted"
+          : quoteStatus === "declined"
+            ? "Declined"
+            : quoteStatus === "booked"
+              ? "Converted to a job"
+              : quoteStatus === "sent"
+                ? "Awaiting accept or decline"
+                : "Waiting for send",
+    },
+    {
+      key: "book",
+      label: "Create job",
+      state:
+        quoteStatus === "booked"
+          ? "done"
+          : quoteStatus === "accepted"
+            ? "ready"
+            : quoteStatus === "declined"
+              ? "skipped"
+              : "blocked",
+      detail:
+        quoteStatus === "booked"
+          ? "Job already created"
+          : quoteStatus === "accepted"
+            ? "Ready to convert to a job"
+            : quoteStatus === "declined"
+              ? "No job created"
+              : "Unlocks after acceptance",
+    },
+  ];
+
   return (
     <div className="mt-6 max-w-3xl space-y-4">
       {booked ? (
@@ -242,6 +315,8 @@ export function EditQuoteForm({
           .
         </div>
       ) : null}
+
+      <WorkflowStepper stages={quoteWorkflowStages} className="xl:grid-cols-4" />
 
       <form
         onSubmit={handleSubmit}

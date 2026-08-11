@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { sendJobInvoice, updateJob } from "@/actions/jobs";
+import { WorkflowStepper } from "@/components/workflow-stepper";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
 
 export function JobDetailActions({
@@ -190,41 +191,7 @@ export function JobDetailActions({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
-        {workflowStages.map((stage) => {
-          const state = stage.state;
-          const done = state === "done";
-          const current = state === "current";
-          const ready = state === "ready";
-          const skipped = state === "skipped";
-          const chipClass = done
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : current
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : ready
-                ? "border-sky-200 bg-sky-50 text-sky-800"
-                : skipped
-                  ? "border-violet-200 bg-violet-50 text-violet-800"
-                  : "border-slate-200 bg-slate-50 text-slate-400";
-          const dot = done ? "✓" : ready ? "↗" : skipped ? "↷" : current ? "•" : "·";
-          return (
-            <div
-              key={stage.key}
-              className={`rounded-lg border px-3 py-2 text-xs shadow-sm ${chipClass}`}
-            >
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-current px-1 text-[10px] font-semibold leading-none">
-                  {dot}
-                </span>
-                <div className="min-w-0">
-                  <p className="font-semibold">{stage.label}</p>
-                  <p className="mt-0.5 text-[11px] opacity-80">{stage.detail}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <WorkflowStepper stages={workflowStages} className="xl:grid-cols-7" />
       <div className="flex flex-wrap gap-2">
         <select
           value={selectedEngineerId}
