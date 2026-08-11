@@ -314,7 +314,9 @@ export function SettingsForm({
           <div>
             <label className="block text-sm font-medium text-slate-700">Invoice footer text</label>
             <p className="mt-0.5 text-xs text-slate-500">
-              Printed at the bottom of every invoice PDF. Defaults to “Thank you for your business.” if left blank.
+              Printed at the bottom of every invoice PDF. You can use placeholders like
+              ##company_name##, ##address##, ##bank_details##, ##email##, ##phone##,
+              ##company_no##, and ##vat_no##. Defaults to “Thank you for your business.” if left blank.
             </p>
             <textarea
               name="invoice_footer_text"

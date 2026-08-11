@@ -29,6 +29,8 @@ export function InvoiceView({
     bankAccountNumber: string;
     bankIBAN: string;
     bankSwift: string;
+    invoiceFooterText: string;
+    showPaymentDetails: boolean;
     invoiceNumber: string;
     invoiceDate: string;
     dueDate: string;
@@ -243,7 +245,7 @@ export function InvoiceView({
             <span>{money(invoice.total)}</span>
           </div>
         </section>
-        {paymentLines.length > 0 ? (
+        {invoice.showPaymentDetails && paymentLines.length > 0 ? (
           <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Payment details
@@ -260,8 +262,8 @@ export function InvoiceView({
             </div>
           </section>
         ) : null}
-        <footer className="mt-12 border-t border-slate-200 pt-4 text-xs text-slate-500">
-          Thank you for your business.
+        <footer className="mt-12 border-t border-slate-200 pt-4 text-xs text-slate-500 whitespace-pre-wrap">
+          {invoice.invoiceFooterText || "Thank you for your business."}
         </footer>
       </div>
       <style jsx global>{`

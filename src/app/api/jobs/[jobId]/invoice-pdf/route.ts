@@ -4,6 +4,7 @@ import { getSessionTenantOrError } from "@/lib/api-auth";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import { formatJobRefFormal } from "@/lib/job-number";
+import { compactTemplateBlock, multilineTemplateBlock, renderTemplateText } from "@/lib/text-template";
 
 export const runtime = "nodejs";
 
@@ -147,6 +148,27 @@ export async function GET(
   ]
     .map((p) => String(p ?? "").trim())
     .filter(Boolean);
+  const footerTemplate = String(tenant?.invoice_footer_text ?? "").trim();
+  const footerValues = {
+    company_name: companyName ?? "",
+    address: compactTemplateBlock(companyAddressLines),
+    address_block: multilineTemplateBlock(companyAddressLines),
+    email: companyEmail ?? "",
+    phone: companyPhone ?? "",
+    company_no: String(tenant?.company_reg_number ?? "").trim(),
+    vat_no: String(tenant?.vat_number ?? "").trim(),
+    bank_name: String(tenant?.bank_name ?? "").trim(),
+    bank_account_name: String(tenant?.bank_account_name ?? "").trim(),
+    bank_account_number: String(tenant?.bank_account_number ?? "").trim(),
+    bank_sort_code: String(tenant?.bank_sort_code ?? "").trim(),
+    bank_iban: String(tenant?.bank_iban ?? "").trim(),
+    bank_swift: String(tenant?.bank_swift ?? "").trim(),
+    bank_details: multilineTemplateBlock(bankLines),
+    bank_details_inline: compactTemplateBlock(bankLines),
+  };
+  const invoiceFooterText =
+    renderTemplateText(footerTemplate, footerValues).trim() || "Thank you for your business.";
+  const footerUsesBankDetails = /##(?:bank_[a-z0-9_]+|bank_details)##|\{\{(?:bank_[a-z0-9_]+|bank_details)\}\}/i.test(footerTemplate);
 
   const clientName = text(client?.company_name ?? client?.contact_name);
   const billingAddressLines = [
@@ -523,7 +545,7 @@ export async function GET(
     }`,
     { x: margin, y: footerY + 4, size: 8.5, font, color: TEXT },
   );
-  if (bankLines.length > 0) {
+  if (!footerUsesBankDetails && bankLines.length > 0) {
     const paymentTop = footerY + 48;
     page.drawText("Payment details", {
       x: margin,
@@ -543,15 +565,18 @@ export async function GET(
     });
   }
 
-  const invoiceFooter =
-    String(tenant?.invoice_footer_text ?? "").trim() || "Thank you for your business.";
-  page.drawText(invoiceFooter, {
-    x: margin,
-    y: footerY - 8,
-    size: 9,
-    font: bold,
-    color: NAVY,
-  });
+  const footerLines = invoiceFooterText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (footerLines.length > 0) {
+    footerLines.forEach((line, idx) => {
+      page.drawText(line, {
+        x: margin,
+        y: footerY - 8 - idx * 11,
+        size: 9,
+        font: bold,
+        color: NAVY,
+      });
+    });
+  }
 
   const pdfBytes = await pdf.save();
   const fileName = `${invoiceNumber.replace(/[^\w-]+/g, "_")}.pdf`;

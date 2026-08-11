@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { createClient } from "@/lib/supabase/server";
+import { compactTemplateBlock, multilineTemplateBlock, renderTemplateText } from "@/lib/text-template";
 import { InvoiceView } from "./invoice-view";
 
 export default async function JobInvoiceStandalonePage({
@@ -45,6 +46,52 @@ export default async function JobInvoiceStandalonePage({
   );
   const { showLogo, showName } = resolveBrandingFromSettings(settings);
   const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
+  const footerTemplate = String(settings.invoice_footer_text || tenant?.invoice_footer_text || "").trim();
+  const footerValues = {
+    company_name: String(settings.company_name || tenant?.name || "").trim(),
+    address: compactTemplateBlock([
+      settings.address_line_1 || settings.company_address1 || tenant?.address1,
+      settings.address_line_2 || settings.company_address2 || tenant?.address2,
+      settings.town || settings.company_town || tenant?.town,
+      settings.postcode || settings.company_postcode || tenant?.postcode,
+    ]),
+    address_block: multilineTemplateBlock([
+      settings.address_line_1 || settings.company_address1 || tenant?.address1,
+      settings.address_line_2 || settings.company_address2 || tenant?.address2,
+      settings.town || settings.company_town || tenant?.town,
+      settings.postcode || settings.company_postcode || tenant?.postcode,
+    ]),
+    email: String(settings.email || settings.company_email || tenant?.email || "").trim(),
+    phone: String(settings.phone || settings.company_phone || tenant?.phone || "").trim(),
+    company_no: String(tenant?.company_reg_number || "").trim(),
+    vat_no: String(tenant?.vat_number || "").trim(),
+    bank_name: String(settings.bank_name || tenant?.bank_name || "").trim(),
+    bank_account_name: String(settings.bank_account_name || tenant?.bank_account_name || "").trim(),
+    bank_account_number: String(settings.bank_account_number || tenant?.bank_account_number || "").trim(),
+    bank_sort_code: String(settings.bank_sort_code || tenant?.bank_sort_code || "").trim(),
+    bank_iban: String(settings.bank_iban || tenant?.bank_iban || "").trim(),
+    bank_swift: String(settings.bank_swift || tenant?.bank_swift || "").trim(),
+    bank_details: multilineTemplateBlock([
+      settings.bank_account_name || tenant?.bank_account_name
+        ? `Account name: ${settings.bank_account_name || tenant?.bank_account_name}`
+        : null,
+      settings.bank_name || tenant?.bank_name ? `Bank: ${settings.bank_name || tenant?.bank_name}` : null,
+      settings.bank_sort_code || tenant?.bank_sort_code ? `Sort code: ${settings.bank_sort_code || tenant?.bank_sort_code}` : null,
+      settings.bank_account_number || tenant?.bank_account_number ? `Account number: ${settings.bank_account_number || tenant?.bank_account_number}` : null,
+      settings.bank_iban || tenant?.bank_iban ? `IBAN: ${settings.bank_iban || tenant?.bank_iban}` : null,
+      settings.bank_swift || tenant?.bank_swift ? `SWIFT/BIC: ${settings.bank_swift || tenant?.bank_swift}` : null,
+    ]),
+    bank_details_inline: compactTemplateBlock([
+      settings.bank_account_name || tenant?.bank_account_name ? `Account name: ${settings.bank_account_name || tenant?.bank_account_name}` : null,
+      settings.bank_name || tenant?.bank_name ? `Bank: ${settings.bank_name || tenant?.bank_name}` : null,
+      settings.bank_sort_code || tenant?.bank_sort_code ? `Sort code: ${settings.bank_sort_code || tenant?.bank_sort_code}` : null,
+      settings.bank_account_number || tenant?.bank_account_number ? `Account number: ${settings.bank_account_number || tenant?.bank_account_number}` : null,
+      settings.bank_iban || tenant?.bank_iban ? `IBAN: ${settings.bank_iban || tenant?.bank_iban}` : null,
+      settings.bank_swift || tenant?.bank_swift ? `SWIFT/BIC: ${settings.bank_swift || tenant?.bank_swift}` : null,
+    ]),
+  };
+  const invoiceFooterText = renderTemplateText(footerTemplate, footerValues).trim() || "Thank you for your business.";
+  const footerUsesBankDetails = /##(?:bank_[a-z0-9_]+|bank_details)##|\{\{(?:bank_[a-z0-9_]+|bank_details)\}\}/i.test(footerTemplate);
 
   return (
     <InvoiceView
@@ -83,6 +130,8 @@ export default async function JobInvoiceStandalonePage({
         ).trim(),
         bankIBAN: String(settings.bank_iban || tenant?.bank_iban || "").trim(),
         bankSwift: String(settings.bank_swift || tenant?.bank_swift || "").trim(),
+        invoiceFooterText,
+        showPaymentDetails: !footerUsesBankDetails,
         invoiceNumber: String(job.custom_invoice_number || `INV-${id.slice(0, 8)}`).trim(),
         invoiceDate: new Date().toLocaleDateString("en-GB"),
         dueDate: new Date(
