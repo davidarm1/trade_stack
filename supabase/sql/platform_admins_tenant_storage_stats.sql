@@ -10,9 +10,17 @@
 --   ON CONFLICT (user_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS public.platform_admins (
-  user_id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  user_id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.platform_admins
+  DROP CONSTRAINT IF EXISTS platform_admins_user_id_fkey;
+ALTER TABLE public.platform_admins
+  ADD CONSTRAINT platform_admins_user_id_fkey
+  FOREIGN KEY (user_id)
+  REFERENCES auth.users (id)
+  ON DELETE RESTRICT;
 
 COMMENT ON TABLE public.platform_admins IS
   'Explicit allowlist for platform-owner access to the admin console.';

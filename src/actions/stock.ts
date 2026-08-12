@@ -137,7 +137,7 @@ async function moveStock(args: {
     quantity: args.quantity,
     job_id: args.jobId ?? null,
     vehicle_id: args.vehicleId ?? null,
-    user_id: ctx.userId,
+    membership_id: ctx.membershipId,
     notes: args.notes ?? null,
   });
   if (moveErr) return { data: null, error: moveErr.message };

@@ -53,8 +53,8 @@ export default async function JobSheetStandalonePage({
       .eq("job_id", id)
       .eq("tenant_id", job.tenant_id)
       .order("sort_order", { ascending: true }),
-    job.assigned_engineer_id
-      ? supabase.from("users").select("name").eq("id", job.assigned_engineer_id).maybeSingle()
+    job.assigned_engineer_membership_id
+      ? supabase.from("memberships").select("display_name").eq("id", job.assigned_engineer_membership_id).eq("company_id", job.tenant_id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase
       .from("job_completions")
@@ -131,7 +131,7 @@ export default async function JobSheetStandalonePage({
       contactNumber={opt(client?.contact_number)}
       dateOnSite={dateOnSite}
       timeOnSite={opt(job.time_onsite)}
-      engineerName={opt(engineer?.name)}
+      engineerName={opt((engineer as { display_name?: string | null } | null)?.display_name ?? null)}
       status={opt(job.status)}
       poNumber={opt(job.client_order_number ?? job.custom_po_number)}
       jobDescription={opt(job.description)}

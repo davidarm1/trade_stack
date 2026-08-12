@@ -71,7 +71,7 @@ export async function createEmailTemplate(args: {
       name: args.name,
       subject: args.subject,
       body_html: args.bodyHtml,
-      created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId,
     })
     .select()
     .single();
@@ -182,7 +182,7 @@ export async function sendCampaign(args: {
       tenant_id: ctx.tenantId,
       template_id: args.templateId,
       audience: args.audience,
-      sent_by_id: ctx.userId,
+      sent_by_membership_id: ctx.membershipId,
       sent_at: new Date().toISOString(),
     })
     .select()

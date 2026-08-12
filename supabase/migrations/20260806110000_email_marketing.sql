@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS public.email_templates (
   name text NOT NULL,
   subject text NOT NULL,
   body_html text NOT NULL,
-  created_by_id uuid REFERENCES public.users(id),
+  created_by_id uuid REFERENCES public.memberships(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.email_campaigns (
   tenant_id uuid NOT NULL REFERENCES public.tenants(id),
   template_id uuid NOT NULL REFERENCES public.email_templates(id),
   audience text NOT NULL CHECK (audience IN ('staff', 'clients')),
-  sent_by_id uuid REFERENCES public.users(id),
+  sent_by_id uuid REFERENCES public.memberships(id),
   sent_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );

@@ -20,7 +20,7 @@ export async function getTimesheets(filters?: {
     .order("shift_date", { ascending: false });
 
   if (filters?.userId) {
-    q = q.eq("user_id", filters.userId);
+    q = q.eq("membership_id", filters.userId);
   }
   if (filters?.from) {
     q = q.gte("shift_date", filters.from);
@@ -44,7 +44,7 @@ export async function approveTimesheet(id: string) {
     .from("timesheets")
     .update({
       status: "approved",
-      approved_by_id: ctx.userId,
+      approved_by_membership_id: ctx.membershipId,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

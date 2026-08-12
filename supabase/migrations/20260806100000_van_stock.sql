@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.van_stock (
   stock_item_id uuid NOT NULL REFERENCES public.stock_items(id),
   quantity numeric NOT NULL DEFAULT 0,
   last_checked_at timestamptz,
-  last_checked_by_id uuid REFERENCES public.users(id),
+  last_checked_by_id uuid REFERENCES public.memberships(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (vehicle_id, stock_item_id)

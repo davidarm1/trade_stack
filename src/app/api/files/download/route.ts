@@ -57,14 +57,14 @@ export async function GET(request: Request) {
       }
       const { data: job, error: jobError } = await session.supabase
         .from("jobs")
-        .select("assigned_engineer_id")
+        .select("assigned_engineer_membership_id")
         .eq("id", file.job_id)
         .eq("tenant_id", session.tenantId)
         .maybeSingle();
       if (jobError) {
         return NextResponse.json({ error: jobError.message }, { status: 500 });
       }
-      if (!job || job.assigned_engineer_id !== session.userId) {
+      if (!job || job.assigned_engineer_membership_id !== session.membershipId) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }

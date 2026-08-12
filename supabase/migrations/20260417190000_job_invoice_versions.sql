@@ -53,7 +53,7 @@ CREATE POLICY "job_invoice_versions_select_by_role"
           public.current_user_role() IN ('owner', 'office', 'viewer')
           OR (
             public.current_user_role() = 'engineer'
-            AND j.assigned_engineer_id = auth.uid()
+            AND j.assigned_engineer_membership_id = public.current_user_membership_id()
           )
         )
     )

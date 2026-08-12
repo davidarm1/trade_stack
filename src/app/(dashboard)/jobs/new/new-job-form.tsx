@@ -153,7 +153,7 @@ export function NewJobForm({
     const form = new FormData(e.currentTarget);
     const title = String(form.get("title") || "");
     const description = String(form.get("description") || "");
-    const assigned = String(form.get("assigned_engineer_id") || "");
+    const assigned = String(form.get("assigned_engineer_membership_id") || "");
     const date_onsite = String(form.get("date_onsite") || "") || null;
     const labour = form.get("labour_charge");
     const labour_charge =
@@ -251,7 +251,7 @@ export function NewJobForm({
       client_id: clientId,
       title,
       description,
-      assigned_engineer_id: assigned || null,
+      assigned_engineer_membership_id: assigned || null,
       date_onsite,
       site_address1: site1,
       site_address2: site2,
@@ -565,7 +565,7 @@ export function NewJobForm({
           Assigned engineer
         </label>
         <select
-          name="assigned_engineer_id"
+          name="assigned_engineer_membership_id"
           defaultValue={assignedEngineerDefault}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         >

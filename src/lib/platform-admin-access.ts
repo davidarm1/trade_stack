@@ -3,7 +3,7 @@
  * Used by requirePlatformAdmin and by unit tests — keeps Next redirects out of tests.
  *
  * Platform admin is independent of public.users.role / tenant membership.
- * public.users remains one-tenant-per-auth-user; the same user may also be allowlisted here.
+ * The memberships migration is introducing multi-membership support; this allowlist remains separate.
  */
 
 export type PlatformAdminAccess =

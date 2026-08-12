@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.stock_movements (
   quantity numeric NOT NULL CHECK (quantity > 0),
   job_id uuid REFERENCES public.jobs(id),
   vehicle_id uuid, -- FK added in the van_stock migration once public.vehicles exists
-  user_id uuid NOT NULL REFERENCES public.users(id),
+  membership_id uuid NOT NULL REFERENCES public.memberships(id),
   notes text,
   moved_at timestamptz NOT NULL DEFAULT now()
 );
@@ -90,5 +90,5 @@ CREATE POLICY "stock_movements_insert_same_tenant"
   WITH CHECK (
     tenant_id IS NOT NULL
     AND tenant_id = public.current_user_tenant_id()
-    AND user_id = auth.uid()
+    AND membership_id = public.current_user_membership_id()
   );

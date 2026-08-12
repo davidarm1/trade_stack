@@ -10,7 +10,7 @@ export function JobDetailActions({
   jobId,
   jobNumber,
   jobTitle,
-  assignedEngineerId,
+  assignedEngineerMembershipId,
   sentToEngineerAt,
   receivedFromEngineerAt,
   signedAt,
@@ -25,7 +25,7 @@ export function JobDetailActions({
   jobId: string;
   jobNumber: number | null;
   jobTitle: string;
-  assignedEngineerId: string | null;
+  assignedEngineerMembershipId: string | null;
   sentToEngineerAt: string | null;
   receivedFromEngineerAt: string | null;
   signedAt: string | null;
@@ -41,7 +41,7 @@ export function JobDetailActions({
   const [msg, setMsg] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [selectedEngineerId, setSelectedEngineerId] = useState(
-    assignedEngineerId ?? "",
+    assignedEngineerMembershipId ?? "",
   );
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceRecipients, setInvoiceRecipients] = useState(
@@ -49,7 +49,7 @@ export function JobDetailActions({
   );
   const [invoiceReason, setInvoiceReason] = useState("Amount corrected");
   const hasEngineer = selectedEngineerId.trim().length > 0;
-  const engineerAssigned = assignedEngineerId?.trim().length
+  const engineerAssigned = assignedEngineerMembershipId?.trim().length
     ? true
     : false;
   const sentDone = Boolean(sentToEngineerAt?.trim());
@@ -223,7 +223,7 @@ export function JobDetailActions({
             patch(
               "save_engineer",
               {
-                assigned_engineer_id: selectedEngineerId,
+                assigned_engineer_membership_id: selectedEngineerId,
                 sent_to_engineer_at: new Date().toISOString(),
                 status: "in_progress",
               },

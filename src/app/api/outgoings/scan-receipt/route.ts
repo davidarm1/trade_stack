@@ -141,7 +141,7 @@ async function validateLinkedJobContext(args: {
     const { data: job, error } = await args.session.supabase
       .from("jobs")
       .select(
-        "id, client_id, assigned_engineer_id, invoice_paid_at, deleted_at",
+        "id, client_id, assigned_engineer_membership_id, invoice_paid_at, deleted_at",
       )
       .eq("id", jobId)
       .eq("tenant_id", args.session.tenantId)
@@ -164,7 +164,7 @@ async function validateLinkedJobContext(args: {
     }
     if (
       args.session.role === "engineer" &&
-      job.assigned_engineer_id !== args.session.userId
+      job.assigned_engineer_membership_id !== args.session.membershipId
     ) {
       return { ok: false, response: insufficientPermissions() };
     }

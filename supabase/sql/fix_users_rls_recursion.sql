@@ -10,7 +10,32 @@
 -- re-apply RLS on `users`. Policies then only compare scalars / auth.uid().
 -- =============================================================================
 
--- 1) Tenant lookup for the logged-in auth user (bypasses RLS safely)
+-- 1) Active membership lookup for the logged-in auth user (bypasses RLS safely)
+CREATE OR REPLACE FUNCTION public.current_user_membership_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT m.id
+  FROM public.memberships m
+  JOIN public.users u
+    ON u.id = auth.uid()
+  WHERE m.user_id = auth.uid()
+    AND m.company_id = u.active_company_id
+    AND m.status = 'active'
+  ORDER BY m.updated_at DESC, m.created_at DESC
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.current_user_membership_id() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.current_user_membership_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_user_membership_id() TO service_role;
+
+COMMENT ON FUNCTION public.current_user_membership_id() IS
+  'Returns the current active membership id for auth.uid(); SECURITY DEFINER avoids RLS recursion.';
+
 CREATE OR REPLACE FUNCTION public.current_user_tenant_id()
 RETURNS uuid
 LANGUAGE sql
@@ -18,9 +43,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT tenant_id
-  FROM public.users
-  WHERE id = auth.uid()
+  SELECT company_id
+  FROM public.memberships
+  WHERE id = public.current_user_membership_id()
   LIMIT 1;
 $$;
 
@@ -29,7 +54,7 @@ GRANT EXECUTE ON FUNCTION public.current_user_tenant_id() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.current_user_tenant_id() TO service_role;
 
 COMMENT ON FUNCTION public.current_user_tenant_id() IS
-  'Returns public.users.tenant_id for auth.uid(); SECURITY DEFINER avoids RLS recursion.';
+  'Returns the current active company for auth.uid() by resolving the current membership; SECURITY DEFINER avoids RLS recursion.';
 
 -- 2) Drop all existing policies on public.users (recursion-safe reset)
 DO $$
@@ -74,4 +99,5 @@ CREATE POLICY "users_update_same_tenant"
 -- =============================================================================
 -- Other tables: avoid subqueries on public.users in policies. Prefer:
 --   USING (tenant_id = public.current_user_tenant_id())
+-- The helper now resolves access via memberships, not directly from users.
 -- =============================================================================

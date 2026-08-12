@@ -5,6 +5,7 @@ type AuditMetadata = Record<string, unknown>;
 export async function logAuditEvent(args: {
   event: string;
   tenant_id?: string | null;
+  membership_id?: string | null;
   user_id?: string | null;
   ip?: string | null;
   user_agent?: string | null;
@@ -14,7 +15,7 @@ export async function logAuditEvent(args: {
     const admin = createServiceRoleClient();
     const auditEvent = {
       p_tenant_id: args.tenant_id ?? null,
-      p_user_id: args.user_id ?? null,
+      p_membership_id: args.membership_id ?? args.user_id ?? null,
       p_event: args.event,
       p_ip: args.ip ?? null,
       p_user_agent: args.user_agent ?? null,
@@ -36,7 +37,7 @@ export async function logAuditEvent(args: {
       message: e instanceof Error ? e.message : "Unknown audit logging error",
       event: {
         p_tenant_id: args.tenant_id ?? null,
-        p_user_id: args.user_id ?? null,
+        p_membership_id: args.membership_id ?? args.user_id ?? null,
         p_event: args.event,
         p_ip: args.ip ?? null,
         p_user_agent: args.user_agent ?? null,

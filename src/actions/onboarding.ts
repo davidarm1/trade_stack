@@ -50,7 +50,7 @@ export async function getOutstandingDocuments() {
     .from("staff_acceptances")
     .select("document_id, document_version")
     .eq("tenant_id", ctx.tenantId)
-    .eq("user_id", ctx.userId);
+    .eq("membership_id", ctx.membershipId);
   if (acceptedErr) return { data: null, error: acceptedErr.message };
 
   const acceptedSet = new Set(
@@ -93,7 +93,7 @@ export async function getAcceptanceStatus() {
 
   const acceptedSet = new Set(
     (acceptances ?? []).map(
-      (a: StaffAcceptance) => `${a.user_id}:${a.document_id}:${a.document_version}`,
+      (a: StaffAcceptance) => `${a.membership_id}:${a.document_id}:${a.document_version}`,
     ),
   );
 
@@ -124,7 +124,7 @@ export async function createOnboardingDocument(args: {
       body: args.body,
       required: args.required,
       version: 1,
-      created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId,
     })
     .select()
     .single();
@@ -180,7 +180,7 @@ export async function acceptOnboardingDocument(documentId: string, version: numb
     .from("staff_acceptances")
     .insert({
       tenant_id: ctx.tenantId,
-      user_id: ctx.userId,
+      membership_id: ctx.membershipId,
       document_id: documentId,
       document_version: version,
     })

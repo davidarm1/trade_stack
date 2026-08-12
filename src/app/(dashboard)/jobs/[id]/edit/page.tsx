@@ -38,7 +38,7 @@ export default async function EditJobPage({
     description: string | null;
     job_type: string | null;
     status: string | null;
-    assigned_engineer_id: string | null;
+    assigned_engineer_membership_id: string | null;
     date_onsite: string | null;
     site_address1: string | null;
     site_address2: string | null;
@@ -75,7 +75,7 @@ export default async function EditJobPage({
           description: job.description,
           job_type: job.job_type,
           status: job.status,
-          assigned_engineer_id: job.assigned_engineer_id,
+          assigned_engineer_membership_id: job.assigned_engineer_membership_id,
           date_onsite: job.date_onsite,
           site_address1: job.site_address1,
           site_address2: job.site_address2,

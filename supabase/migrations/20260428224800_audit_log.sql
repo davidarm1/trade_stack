@@ -24,9 +24,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT role::text
-  FROM public.users
-  WHERE id = auth.uid()
+  SELECT m.role::text
+  FROM public.memberships m
+  WHERE m.id = public.current_user_membership_id()
   LIMIT 1;
 $$;
 

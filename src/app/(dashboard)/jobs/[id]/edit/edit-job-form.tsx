@@ -12,7 +12,7 @@ type EditJobInitial = {
   description: string | null;
   job_type: string | null;
   status: string | null;
-  assigned_engineer_id: string | null;
+  assigned_engineer_membership_id: string | null;
   date_onsite: string | null;
   site_address1: string | null;
   site_address2: string | null;
@@ -70,7 +70,7 @@ export function EditJobForm({
       title,
       description: asNullableText("description"),
       status: asNullableText("status"),
-      assigned_engineer_id: asNullableText("assigned_engineer_id"),
+      assigned_engineer_membership_id: asNullableText("assigned_engineer_membership_id"),
       date_onsite: asNullableText("date_onsite"),
       site_address1: asNullableText("site_address1"),
       site_address2: asNullableText("site_address2"),
@@ -161,8 +161,8 @@ export function EditJobForm({
             Assigned engineer
           </label>
           <select
-            name="assigned_engineer_id"
-            defaultValue={initial.assigned_engineer_id ?? ""}
+            name="assigned_engineer_membership_id"
+            defaultValue={initial.assigned_engineer_membership_id ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
             <option value="">Unassigned</option>

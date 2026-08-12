@@ -40,7 +40,7 @@ export async function createReceipt(data: ReceiptInsert) {
     .insert({
       ...data,
       tenant_id: ctx.tenantId,
-      uploaded_by_id: ctx.userId,
+      uploaded_by_membership_id: ctx.membershipId,
     })
     .select()
     .single();
@@ -101,7 +101,7 @@ export async function getReceipts(): Promise<{ data: EnrichedReceipt[] | null; e
     return bCreated - aCreated;
   });
 
-  const uploaderIds = [...new Set(rows.map((r) => r.uploaded_by_id).filter(Boolean))] as string[];
+  const uploaderIds = [...new Set(rows.map((r) => r.uploaded_by_membership_id).filter(Boolean))] as string[];
   const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
 
   const [uploadersRes, jobsRes] = await Promise.all([
@@ -118,7 +118,7 @@ export async function getReceipts(): Promise<{ data: EnrichedReceipt[] | null; e
 
   const enriched: EnrichedReceipt[] = sorted.map((r) => ({
     ...r,
-    uploaded_by_name: r.uploaded_by_id ? (uploaderMap.get(r.uploaded_by_id) ?? null) : null,
+    uploaded_by_name: r.uploaded_by_membership_id ? (uploaderMap.get(r.uploaded_by_membership_id) ?? null) : null,
     job_number: r.job_id ? (jobMap.get(r.job_id)?.job_number ?? null) : null,
     job_title: r.job_id ? (jobMap.get(r.job_id)?.title ?? null) : null,
   }));

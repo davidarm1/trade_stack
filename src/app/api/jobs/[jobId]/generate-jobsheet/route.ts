@@ -135,8 +135,8 @@ async function buildJobSheetPdf(args: {
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .order("sort_order", { ascending: true }),
-    job.assigned_engineer_id
-      ? supabase.from("users").select("name").eq("id", job.assigned_engineer_id).maybeSingle()
+    job.assigned_engineer_membership_id
+      ? supabase.from("memberships").select("display_name").eq("id", job.assigned_engineer_membership_id).eq("company_id", job.tenant_id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from("job_completions").select("*").eq("job_id", jobId).eq("tenant_id", tenantId).maybeSingle(),
     supabase
@@ -336,7 +336,7 @@ async function buildJobSheetPdf(args: {
   const metaRows: [string, string | null][] = [
     ["Date on site:", opt(job.date_onsite)],
     ["Time:", opt(job.time_onsite)],
-    ["Engineer:", opt(engineer?.name)],
+    ["Engineer:", opt((engineer as { display_name?: string | null } | null)?.display_name ?? null)],
     ["Status:", opt(job.status)],
     ["PO / Order No:", opt(job.client_order_number ?? job.custom_po_number)],
   ];

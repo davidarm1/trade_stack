@@ -122,10 +122,17 @@ export async function signIn(email: string, password: string) {
       .maybeSingle();
     mark("load-profile", { role: profile?.role ?? null });
 
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("id")
+      .eq("user_id", data.user.id)
+      .eq("company_id", profile?.tenant_id ?? "")
+      .maybeSingle();
+
     await logAuditEvent({
       event: "login_success",
       tenant_id: profile?.tenant_id ?? null,
-      user_id: data.user.id,
+      membership_id: membership?.id ?? null,
       ip: audit.ip,
       user_agent: audit.user_agent,
       metadata: { email: normalizedEmail },

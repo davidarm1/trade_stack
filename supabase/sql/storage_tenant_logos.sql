@@ -12,9 +12,7 @@ CREATE POLICY "tenant_logos_select_own"
   TO authenticated
   USING (
     bucket_id = 'tenant-logos'
-    AND split_part(name, '/', 1) = (
-      SELECT u.tenant_id::text FROM public.users u WHERE u.id = auth.uid()
-    )
+    AND split_part(name, '/', 1) = COALESCE(public.current_user_tenant_id()::text, '')
   );
 
 DROP POLICY IF EXISTS "tenant_logos_insert_own" ON storage.objects;
@@ -23,9 +21,7 @@ CREATE POLICY "tenant_logos_insert_own"
   TO authenticated
   WITH CHECK (
     bucket_id = 'tenant-logos'
-    AND split_part(name, '/', 1) = (
-      SELECT u.tenant_id::text FROM public.users u WHERE u.id = auth.uid()
-    )
+    AND split_part(name, '/', 1) = COALESCE(public.current_user_tenant_id()::text, '')
   );
 
 DROP POLICY IF EXISTS "tenant_logos_update_own" ON storage.objects;
@@ -34,15 +30,11 @@ CREATE POLICY "tenant_logos_update_own"
   TO authenticated
   USING (
     bucket_id = 'tenant-logos'
-    AND split_part(name, '/', 1) = (
-      SELECT u.tenant_id::text FROM public.users u WHERE u.id = auth.uid()
-    )
+    AND split_part(name, '/', 1) = COALESCE(public.current_user_tenant_id()::text, '')
   )
   WITH CHECK (
     bucket_id = 'tenant-logos'
-    AND split_part(name, '/', 1) = (
-      SELECT u.tenant_id::text FROM public.users u WHERE u.id = auth.uid()
-    )
+    AND split_part(name, '/', 1) = COALESCE(public.current_user_tenant_id()::text, '')
   );
 
 DROP POLICY IF EXISTS "tenant_logos_delete_own" ON storage.objects;
@@ -51,7 +43,5 @@ CREATE POLICY "tenant_logos_delete_own"
   TO authenticated
   USING (
     bucket_id = 'tenant-logos'
-    AND split_part(name, '/', 1) = (
-      SELECT u.tenant_id::text FROM public.users u WHERE u.id = auth.uid()
-    )
+    AND split_part(name, '/', 1) = COALESCE(public.current_user_tenant_id()::text, '')
   );

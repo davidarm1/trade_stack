@@ -77,7 +77,7 @@ export async function POST(
     const { supabase, tenantId } = session;
     const { data: job, error: jobErr } = await supabase
       .from("jobs")
-      .select("id, assigned_engineer_id, status")
+      .select("id, assigned_engineer_membership_id, status")
       .eq("id", jobId)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -141,7 +141,7 @@ export async function POST(
         tenantId,
         userId: session.userId,
         role: session.role,
-        assignedEngineerId: job.assigned_engineer_id,
+        assignedEngineerId: job.assigned_engineer_membership_id,
         jobStatus: job.status,
         key,
         downloadUrl: b2DownloadPathForKey(key),

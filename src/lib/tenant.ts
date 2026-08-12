@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
 
 export type TenantContext =
-  | { success: true; userId: string; tenantId: string }
+  | { success: true; userId: string; tenantId: string; membershipId: string | null }
   | { success: false; error: string };
 
 export async function getTenantContext(): Promise<TenantContext> {
@@ -33,10 +33,19 @@ export async function getTenantContext(): Promise<TenantContext> {
     };
   }
 
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("company_id", profile.tenant_id)
+    .in("status", ["active", "leaver"])
+    .maybeSingle();
+
   return {
     success: true,
     userId: user.id,
     tenantId: profile.tenant_id,
+    membershipId: membership?.id ?? null,
   };
 }
 

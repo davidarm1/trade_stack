@@ -110,7 +110,7 @@ export async function addMaintenanceLogEntry(args: {
       logged_date: args.loggedDate,
       description: args.description,
       cost: args.cost ?? null,
-      created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId,
     })
     .select()
     .single();

@@ -101,7 +101,7 @@ export async function updateJob(id: string, data: JobInsert) {
 
   // Unassigning an engineer must also clear sent/received timestamps —
   // the jobs_sent_requires_assigned_engineer constraint forbids a sent job with no engineer.
-  if ("assigned_engineer_id" in safe && safe.assigned_engineer_id === null) {
+  if ("assigned_engineer_membership_id" in safe && safe.assigned_engineer_membership_id === null) {
     (safe as Record<string, unknown>).sent_to_engineer_at = null;
     (safe as Record<string, unknown>).received_from_engineer_at = null;
   }
@@ -317,7 +317,7 @@ export async function updateJobCompletionDetails(
 
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .select("assigned_engineer_id")
+    .select("assigned_engineer_membership_id")
     .eq("id", id)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
@@ -330,7 +330,7 @@ export async function updateJobCompletionDetails(
     .insert({
       tenant_id: ctx.tenantId,
       job_id: id,
-      engineer_id: job.assigned_engineer_id ?? null,
+      engineer_id: job.assigned_engineer_membership_id ?? null,
       ...payload,
       submitted_at: now,
       date_completed: now.slice(0, 10),
@@ -575,7 +575,7 @@ export async function getJobs(options?: { search?: string }) {
   const engineerIds = Array.from(
     new Set(
       (jobs ?? [])
-        .map((j: { assigned_engineer_id?: string | null }) => j.assigned_engineer_id)
+        .map((j: { assigned_engineer_membership_id?: string | null }) => j.assigned_engineer_membership_id)
         .filter(Boolean) as string[],
     ),
   );
@@ -596,15 +596,15 @@ export async function getJobs(options?: { search?: string }) {
     (j: {
       id: string;
       client_id?: string | null;
-      assigned_engineer_id?: string | null;
+      assigned_engineer_membership_id?: string | null;
       [key: string]: unknown;
     }) => ({
       ...j,
       client_name: j.client_id
         ? clientsById[j.client_id]?.company_name ?? null
         : null,
-      engineer_name: j.assigned_engineer_id
-        ? engineers[j.assigned_engineer_id]?.name ?? null
+      engineer_name: j.assigned_engineer_membership_id
+        ? engineers[j.assigned_engineer_membership_id]?.name ?? null
         : null,
     }),
   );
@@ -684,16 +684,18 @@ export const getJob = cache(async function getJob(id: string) {
     clientRow = c;
   }
 
-  let engineer: { id: string; name: string | null; email: string | null } | null =
-    null;
-  if (job.assigned_engineer_id) {
-    const { data: e } = await supabase
-      .from("users")
-      .select("id, name, email")
-      .eq("id", job.assigned_engineer_id)
-      .eq("tenant_id", ctx.tenantId)
+  let engineer: { name: string | null; email: string | null } | null = null;
+  if (job.assigned_engineer_membership_id) {
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("display_name")
+      .eq("id", job.assigned_engineer_membership_id)
+      .eq("company_id", ctx.tenantId)
       .maybeSingle();
-    engineer = e;
+    engineer = {
+      name: membership?.display_name ?? null,
+      email: null,
+    };
   }
 
   const { data: materials } = await supabase
@@ -768,7 +770,7 @@ export async function rescheduleJob(
   await logAuditEvent({
     event: "job_rescheduled",
     tenant_id: ctx.tenantId,
-    user_id: ctx.userId,
+    membership_id: ctx.membershipId,
     metadata: {
       job_id: id,
       old_date: (current as { date_onsite?: string | null }).date_onsite ?? null,

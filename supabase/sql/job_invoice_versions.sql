@@ -11,7 +11,7 @@ CREATE TABLE public.job_invoice_versions (
   b2_key text NOT NULL,
   public_url text NOT NULL,
   is_current boolean NOT NULL DEFAULT false,
-  created_by_id uuid REFERENCES public.users (id) ON DELETE SET NULL,
+  created_by_membership_id uuid REFERENCES public.memberships (id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -21,6 +21,9 @@ CREATE UNIQUE INDEX job_invoice_versions_job_version_unique
 CREATE UNIQUE INDEX job_invoice_versions_one_current_per_job
   ON public.job_invoice_versions (job_id)
   WHERE is_current = true;
+
+CREATE INDEX job_invoice_versions_created_by_membership_idx
+  ON public.job_invoice_versions (tenant_id, created_by_membership_id, created_at DESC);
 
 CREATE INDEX job_invoice_versions_tenant_job_created_idx
   ON public.job_invoice_versions (tenant_id, job_id, created_at DESC);
@@ -53,7 +56,7 @@ CREATE POLICY "job_invoice_versions_select_by_role"
           public.current_user_role() IN ('owner', 'office', 'viewer')
           OR (
             public.current_user_role() = 'engineer'
-            AND j.assigned_engineer_id = auth.uid()
+            AND j.assigned_engineer_membership_id = public.current_user_membership_id()
           )
         )
     )

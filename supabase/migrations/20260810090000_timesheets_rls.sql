@@ -43,7 +43,7 @@ CREATE POLICY "timesheets_insert_own"
   WITH CHECK (
     tenant_id IS NOT NULL
     AND tenant_id = public.current_user_tenant_id()
-    AND user_id = auth.uid()
+    AND user_id = public.current_user_membership_id()
   );
 
 DROP POLICY IF EXISTS "timesheets_update_approver" ON public.timesheets;

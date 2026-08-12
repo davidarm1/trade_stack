@@ -9,6 +9,7 @@ export type SessionTenantResult =
       ok: true;
       supabase: SupabaseClient;
       userId: string;
+      membershipId: string | null;
       tenantId: string;
       role: UserRole | null;
     }
@@ -73,10 +74,19 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
       };
     }
 
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("company_id", profile.tenant_id)
+      .in("status", ["active", "leaver"])
+      .maybeSingle();
+
     return {
       ok: true,
       supabase,
       userId: user.id,
+      membershipId: membership?.id ?? null,
       tenantId: profile.tenant_id,
       role: (profile.role as UserRole | null) ?? null,
     };
@@ -116,10 +126,19 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
     };
   }
 
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("company_id", profile.tenant_id)
+    .in("status", ["active", "leaver"])
+    .maybeSingle();
+
   return {
     ok: true,
     supabase,
     userId: user.id,
+    membershipId: membership?.id ?? null,
     tenantId: profile.tenant_id,
     role: (profile.role as UserRole | null) ?? null,
   };

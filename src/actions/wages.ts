@@ -35,7 +35,7 @@ export async function getWages(filters?: {
     .order("period_date", { ascending: false });
 
   if (filters?.userId) {
-    q = q.eq("user_id", filters.userId);
+    q = q.eq("membership_id", filters.userId);
   }
   if (filters?.periodFrom) {
     q = q.gte("period_date", filters.periodFrom);
@@ -59,7 +59,7 @@ export async function approveWage(id: string) {
     .from("wages")
     .update({
       approval_status: "approved",
-      approved_by_id: ctx.userId,
+      approved_by_membership_id: ctx.membershipId,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -109,7 +109,7 @@ export async function getApprovedTravelHours(
     .from("timesheets")
     .select("travel_hours, job_id")
     .eq("tenant_id", ctx.tenantId)
-    .eq("user_id", userId)
+    .eq("membership_id", userId)
     .eq("status", "approved")
     .gte("shift_date", periodFrom)
     .lte("shift_date", periodTo);
@@ -215,18 +215,18 @@ export async function applyTravelPayToWage(
 
   const { data: wage, error: wageErr } = await supabase
     .from("wages")
-    .select("id, user_id, base_wage, overtime_wage")
+    .select("id, membership_id, base_wage, overtime_wage")
     .eq("id", wageId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
   if (wageErr) return { data: null, error: wageErr.message };
   if (!wage) return { data: null, error: "Wage record not found." };
-  if (!wage.user_id) return { data: null, error: "Wage record has no user." };
+  if (!wage.membership_id) return { data: null, error: "Wage record has no user." };
 
   const { data: user, error: userErr } = await supabase
     .from("users")
     .select("travel_rate")
-    .eq("id", wage.user_id)
+    .eq("id", wage.membership_id)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
   if (userErr) return { data: null, error: userErr.message };
@@ -239,7 +239,7 @@ export async function applyTravelPayToWage(
   }
 
   const { data: summary, error: hoursErr } = await getApprovedTravelHours(
-    wage.user_id,
+    wage.membership_id,
     periodFrom,
     periodTo,
   );
@@ -282,7 +282,7 @@ export async function rejectWage(id: string, reason: string) {
     .update({
       approval_status: "rejected",
       rejection_reason: reason,
-      approved_by_id: ctx.userId,
+      approved_by_membership_id: ctx.membershipId,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

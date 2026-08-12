@@ -221,9 +221,9 @@ export default async function Page({
           jobId={j.id}
           jobNumber={jobNo}
           jobTitle={titleStr}
-          assignedEngineerId={
-            typeof j.assigned_engineer_id === "string"
-              ? j.assigned_engineer_id
+          assignedEngineerMembershipId={
+            typeof j.assigned_engineer_membership_id === "string"
+              ? j.assigned_engineer_membership_id
               : null
           }
           sentToEngineerAt={j.sent_to_engineer_at ?? null}

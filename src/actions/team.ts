@@ -31,6 +31,7 @@ type TeamActionResult = {
 
 type TeamActor = {
   userId: string;
+  membershipId: string;
   tenantId: string;
   role: UserRole;
 };
@@ -77,6 +78,7 @@ async function requireTeamManagerAccess(): Promise<{
     supabase,
     actor: {
       userId: ctx.userId,
+      membershipId: ctx.membershipId ?? ctx.userId,
       tenantId: ctx.tenantId,
       role: me.role as UserRole,
     },
@@ -103,15 +105,18 @@ async function getTargetUserForTenant(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
   userId: string,
-): Promise<{ id: string; role: UserRole } | null> {
+): Promise<{ id: string; membershipId: string; role: UserRole } | null> {
   const { data } = await supabase
     .from("users")
-    .select("id, role")
+    .select("id, role, memberships!inner(id)")
     .eq("id", userId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!data?.id || !data?.role) return null;
-  return { id: data.id, role: data.role as UserRole };
+  const membershipId =
+    (data as { memberships?: { id?: string }[] }).memberships?.[0]?.id ?? null;
+  if (!membershipId) return null;
+  return { id: data.id, membershipId, role: data.role as UserRole };
 }
 
 function isAlreadyRegisteredAuthError(error?: { message?: string; code?: string } | null): boolean {
@@ -582,7 +587,7 @@ export async function listMobileAccessTokens(userId: string) {
     .from("mobile_access_tokens")
     .select("*")
     .eq("tenant_id", actor.tenantId)
-    .eq("user_id", userId)
+    .eq("membership_id", target.membershipId)
     .order("created_at", { ascending: false })
     .limit(10);
   if (error) return { data: null, error: error.message };
@@ -604,7 +609,7 @@ export async function generateMobileAccessToken(userId: string) {
     .from("mobile_access_tokens")
     .update({ revoked_at: nowIso })
     .eq("tenant_id", actor.tenantId)
-    .eq("user_id", userId)
+    .eq("membership_id", target.membershipId)
     .is("revoked_at", null)
     .is("used_at", null);
 
@@ -618,10 +623,10 @@ export async function generateMobileAccessToken(userId: string) {
       .from("mobile_access_tokens")
       .insert({
         tenant_id: actor.tenantId,
-        user_id: userId,
+        membership_id: target.membershipId,
         token_hash: tokenHash,
         token_hint: hint,
-        created_by_id: actor.userId,
+        created_by_membership_id: actor.membershipId,
         expires_at: expiresAt,
       })
       .select("*")
@@ -630,7 +635,7 @@ export async function generateMobileAccessToken(userId: string) {
       await logAuditEvent({
         event: "mobile_token_generated",
         tenant_id: actor.tenantId,
-        user_id: actor.userId,
+        membership_id: actor.membershipId,
         metadata: {
           target_user_id: userId,
           token_id: data.id,
@@ -663,7 +668,7 @@ export async function revokeMobileAccessToken(tokenId: string, userId: string) {
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", tokenId)
     .eq("tenant_id", actor.tenantId)
-    .eq("user_id", userId)
+    .eq("membership_id", target.membershipId)
     .is("revoked_at", null)
     .select("*")
     .maybeSingle();
@@ -673,7 +678,7 @@ export async function revokeMobileAccessToken(tokenId: string, userId: string) {
   await logAuditEvent({
     event: "mobile_token_revoked",
     tenant_id: actor.tenantId,
-    user_id: actor.userId,
+    membership_id: actor.membershipId,
     metadata: {
       target_user_id: userId,
       token_id: tokenId,

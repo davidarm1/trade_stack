@@ -51,6 +51,37 @@ export interface UserRow {
   approver2_id: string | null;
   is_active: boolean;
   leaver_at: string | null;
+  avatar_url: string | null;
+  locale: string | null;
+  theme: string | null;
+  active_company_id: string | null;
+  account_type: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MembershipStatus = "invited" | "active" | "suspended" | "leaver";
+
+export interface Membership {
+  id: string;
+  user_id: string;
+  company_id: string;
+  role: string;
+  status: MembershipStatus;
+  display_name: string | null;
+  job_title: string | null;
+  employee_ref: string | null;
+  work_phone: string | null;
+  concurrent_allowed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MembershipSpell {
+  id: string;
+  membership_id: string;
+  joined_at: string;
+  left_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,7 +120,7 @@ export interface Job {
   status: string | null;
   title: string | null;
   description: string | null;
-  assigned_engineer_id: string | null;
+  assigned_engineer_membership_id: string | null;
   allocated_at: string | null;
   site_address1: string | null;
   site_address2: string | null;
@@ -116,7 +147,7 @@ export interface Job {
   sent_to_engineer_at: string | null;
   received_from_engineer_at: string | null;
   approved_at: string | null;
-  approved_by_id: string | null;
+  approved_by_membership_id: string | null;
   invoice_sent_at: string | null;
   invoice_sent_to_email: string | null;
   invoice_paid_at: string | null;
@@ -128,7 +159,7 @@ export interface Job {
   parent_job_id: string | null;
   source_quote_id: string | null;
   new_work_request: boolean | null;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -187,7 +218,7 @@ export interface JobInvoiceVersion {
   b2_key: string;
   public_url: string;
   is_current: boolean;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
 }
 
@@ -207,7 +238,7 @@ export interface JobCompletion {
   id: string;
   tenant_id: string;
   job_id: string;
-  engineer_id: string | null;
+  engineer_membership_id: string | null;
   work_carried_out: string | null;
   parts_used: string | null;
   recommendations: string | null;
@@ -226,7 +257,7 @@ export interface JobImage {
   image_url: string;
   image_name: string | null;
   image_type: string | null;
-  uploaded_by_id: string | null;
+  uploaded_by_membership_id: string | null;
   uploaded_at: string | null;
 }
 
@@ -246,10 +277,10 @@ export interface Quote {
   price: number | null;
   status: string | null;
   booked_job_id: string | null;
-  assigned_engineer_id: string | null;
+  assigned_engineer_membership_id: string | null;
   quote_date: string | null;
   expires_at: string | null;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -263,7 +294,7 @@ export interface Receipt {
   tenant_id: string;
   job_id: string | null;
   client_id: string | null;
-  uploaded_by_id: string | null;
+  uploaded_by_membership_id: string | null;
   parent_receipt_id: string | null;
   receipt_url: string | null;
   friendly_receipt_url: string | null;
@@ -302,7 +333,7 @@ export interface Receipt {
 export interface Timesheet {
   id: string;
   tenant_id: string;
-  user_id: string | null;
+  membership_id: string | null;
   job_id: string | null;
   shift_date: string | null;
   start_time: string | null;
@@ -318,7 +349,7 @@ export interface Timesheet {
   travel_hours: number | null;
   status: string | null;
   comments: string | null;
-  approved_by_id: string | null;
+  approved_by_membership_id: string | null;
   approved_at: string | null;
   created_at: string;
   updated_at: string;
@@ -327,7 +358,7 @@ export interface Timesheet {
 export interface Wage {
   id: string;
   tenant_id: string;
-  user_id: string | null;
+  membership_id: string | null;
   period_date: string | null;
   hourly_rate: number | null;
   base_hours: number | null;
@@ -337,11 +368,11 @@ export interface Wage {
   overtime_wage: number | null;
   /** Sum of timesheets.travel_hours for the period; not yet computed anywhere. */
   travel_hours: number | null;
-  /** travel_hours * users.travel_rate; not yet computed anywhere. */
+  /** travel_hours * members.travel_rate; not yet computed anywhere. */
   travel_wage: number | null;
   total_wage: number | null;
   approval_status: string | null;
-  approved_by_id: string | null;
+  approved_by_membership_id: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
   notes: string | null;
@@ -361,10 +392,10 @@ export interface SettingRow {
 export interface MobileAccessToken {
   id: string;
   tenant_id: string;
-  user_id: string;
+  membership_id: string;
   token_hash: string;
   token_hint: string;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   expires_at: string;
   revoked_at: string | null;
   used_at: string | null;
@@ -397,7 +428,7 @@ export interface StockMovement {
   quantity: number;
   job_id: string | null;
   vehicle_id: string | null;
-  user_id: string;
+  membership_id: string;
   notes: string | null;
   moved_at: string;
 }
@@ -409,7 +440,7 @@ export interface Vehicle {
   tenant_id: string;
   registration: string;
   make_model: string | null;
-  assigned_user_id: string | null;
+  assigned_membership_id: string | null;
   mot_due_date: string | null;
   insurance_renewal_date: string | null;
   notes: string | null;
@@ -426,7 +457,7 @@ export interface VehicleMaintenanceLogEntry {
   description: string;
   cost: number | null;
   receipt_id: string | null;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
 }
 
@@ -439,7 +470,7 @@ export interface VanStock {
   stock_item_id: string;
   quantity: number;
   last_checked_at: string | null;
-  last_checked_by_id: string | null;
+  last_checked_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -453,7 +484,7 @@ export interface OnboardingDocument {
   body: string;
   version: number;
   required: boolean;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -461,7 +492,7 @@ export interface OnboardingDocument {
 export interface StaffAcceptance {
   id: string;
   tenant_id: string;
-  user_id: string;
+  membership_id: string | null;
   document_id: string;
   document_version: number;
   accepted_at: string;
@@ -478,7 +509,7 @@ export interface EmailTemplate {
   name: string;
   subject: string;
   body_html: string;
-  created_by_id: string | null;
+  created_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -488,7 +519,7 @@ export interface EmailCampaign {
   tenant_id: string;
   template_id: string;
   audience: EmailMarketingAudience;
-  sent_by_id: string | null;
+  sent_by_membership_id: string | null;
   sent_at: string | null;
   created_at: string;
 }

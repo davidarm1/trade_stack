@@ -2,10 +2,10 @@
 -- Jobs visibility by role (run in Supabase SQL Editor after reviewing)
 --
 -- - owner, office, viewer: all jobs in their tenant (allocate / oversee)
--- - engineer: only rows where assigned_engineer_id = auth.uid()
+-- - engineer: only rows where assigned_engineer_membership_id = current_user_membership_id()
 --
--- Requires: public.current_user_tenant_id() (see fix_users_rls_recursion.sql)
--- Requires: public.users.role uses values: owner | office | engineer | viewer
+-- Requires: public.current_user_tenant_id() / public.current_user_membership_id()
+-- Requires membership roles: owner | office | engineer | viewer
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.current_user_role()
@@ -15,9 +15,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT role::text
-  FROM public.users
-  WHERE id = auth.uid()
+  SELECT m.role::text
+  FROM public.memberships m
+  WHERE m.id = public.current_user_membership_id()
   LIMIT 1;
 $$;
 
@@ -26,7 +26,7 @@ GRANT EXECUTE ON FUNCTION public.current_user_role() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.current_user_role() TO service_role;
 
 COMMENT ON FUNCTION public.current_user_role() IS
-  'App role for auth.uid(); SECURITY DEFINER avoids RLS recursion on public.users';
+  'App role for the current active membership; SECURITY DEFINER avoids RLS recursion on public.users.';
 
 -- Replace any single broad "jobs_select_same_tenant" policy with this logic:
 DROP POLICY IF EXISTS "jobs_select_same_tenant" ON public.jobs;
@@ -42,7 +42,7 @@ CREATE POLICY "jobs_select_by_role"
       public.current_user_role() IN ('owner', 'office', 'viewer')
       OR (
         public.current_user_role() = 'engineer'
-        AND assigned_engineer_id = auth.uid()
+        AND assigned_engineer_membership_id = public.current_user_membership_id()
       )
     )
   );

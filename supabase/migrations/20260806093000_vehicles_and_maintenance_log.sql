@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   tenant_id uuid NOT NULL REFERENCES public.tenants(id),
   registration text NOT NULL,
   make_model text,
-  assigned_user_id uuid REFERENCES public.users(id),
+  assigned_user_id uuid REFERENCES public.memberships(id),
   mot_due_date date,
   insurance_renewal_date date,
   notes text,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.vehicle_maintenance_log (
   description text NOT NULL,
   cost numeric,
   receipt_id uuid REFERENCES public.receipts(id),
-  created_by_id uuid REFERENCES public.users(id),
+  created_by_id uuid REFERENCES public.memberships(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

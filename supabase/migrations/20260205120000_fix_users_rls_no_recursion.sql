@@ -1,5 +1,27 @@
 -- Synced with supabase/sql/fix_users_rls_recursion.sql — run via Supabase CLI or SQL Editor.
 
+CREATE OR REPLACE FUNCTION public.current_user_membership_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT m.id
+  FROM public.memberships m
+  JOIN public.users u
+    ON u.id = auth.uid()
+  WHERE m.user_id = auth.uid()
+    AND m.company_id = u.active_company_id
+    AND m.status = 'active'
+  ORDER BY m.updated_at DESC, m.created_at DESC
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.current_user_membership_id() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.current_user_membership_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_user_membership_id() TO service_role;
+
 CREATE OR REPLACE FUNCTION public.current_user_tenant_id()
 RETURNS uuid
 LANGUAGE sql
@@ -7,9 +29,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT tenant_id
-  FROM public.users
-  WHERE id = auth.uid()
+  SELECT company_id
+  FROM public.memberships
+  WHERE id = public.current_user_membership_id()
   LIMIT 1;
 $$;
 

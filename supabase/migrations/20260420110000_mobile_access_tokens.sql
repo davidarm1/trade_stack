@@ -4,10 +4,10 @@
 CREATE TABLE IF NOT EXISTS public.mobile_access_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants (id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  membership_id uuid NOT NULL REFERENCES public.memberships (id) ON DELETE CASCADE,
   token_hash text NOT NULL,
   token_hint text NOT NULL,
-  created_by_id uuid REFERENCES public.users (id) ON DELETE SET NULL,
+  created_by_membership_id uuid REFERENCES public.memberships (id) ON DELETE SET NULL,
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
   used_at timestamptz,
