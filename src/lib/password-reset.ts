@@ -90,10 +90,13 @@ export async function generateAndSendPasswordResetEmail(email: string) {
   });
 }
 
-export async function generateAndSendCompanySetupLink(email: string) {
+export async function generateAndSendCompanySetupLink(
+  email: string,
+  next: string,
+) {
   return generateLinkAndEmail({
     email,
     subjectKind: "setup",
-    next: "/auth/reset-password",
+    next,
   });
 }

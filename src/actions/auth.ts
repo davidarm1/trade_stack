@@ -290,6 +290,7 @@ export async function signUp(
   password: string,
   /** e.g. `core_monthly` | `pro_monthly` from `tenantPlanValue()` */
   plan: string,
+  packageId: string,
 ) {
   const admin = createServiceRoleClient();
   const now = new Date().toISOString();
@@ -329,7 +330,10 @@ export async function signUp(
       });
     if (signInError || !signInData.user) {
       if (/invalid login credentials/i.test(signInError?.message ?? "")) {
-        const setupLinkResult = await generateAndSendCompanySetupLink(email);
+        const setupLinkResult = await generateAndSendCompanySetupLink(
+          email,
+          `/register?step=4&package=${packageId}`,
+        );
         if (!setupLinkResult.error) {
           return {
             data: null,
@@ -544,7 +548,7 @@ export async function signUpFromRegisterForm(formData: FormData) {
       `/register?step=4&package=${packageId}&error=${encodeURIComponent("Please fill in all fields.")}`,
     );
   }
-  const { error } = await signUp(name, companyName, email, password, plan);
+  const { error } = await signUp(name, companyName, email, password, plan, packageId);
   if (error) {
     const safe =
       error.length > 400 ? `${error.slice(0, 400)}…` : error;

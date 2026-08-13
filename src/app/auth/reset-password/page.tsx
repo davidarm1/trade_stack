@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const PENDING_PASSWORD_KEY = "tradestack.pendingResetPassword";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") ?? "/dashboard";
   const [checking, setChecking] = useState(true);
   const [canReset, setCanReset] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function ResetPasswordPage() {
           )
         ) {
           window.sessionStorage.setItem(PENDING_PASSWORD_KEY, password);
-          router.replace("/auth/mfa-challenge?next=/auth/reset-password");
+          router.replace(`/auth/mfa-challenge?next=${encodeURIComponent(next)}`);
           router.refresh();
           return;
         }
@@ -80,7 +82,7 @@ export default function ResetPasswordPage() {
       }
 
       window.sessionStorage.removeItem(PENDING_PASSWORD_KEY);
-      router.replace("/dashboard");
+      router.replace(next);
       router.refresh();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not update password.");
@@ -208,5 +210,19 @@ export default function ResetPasswordPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+          <p className="text-sm text-slate-600">Loading…</p>
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
