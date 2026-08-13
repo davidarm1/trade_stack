@@ -102,7 +102,7 @@ function LoginForm() {
           </div>
           {resetSuccess && (
             <p className="text-sm text-emerald-700" role="status">
-              Your password was updated. Sign in with your new password.
+              Your password was updated. Sign in to continue setup.
             </p>
           )}
           {error && (
@@ -123,7 +123,7 @@ function LoginForm() {
           <Link href="/register" className="font-medium text-slate-900 underline">
             Sign up
           </Link>
-          {" "}if you are an owner creating a company. Team members are added by a company owner inside the app.
+          {" "}if you are an owner creating a company. If the password is wrong, use Forgot password and we’ll email a setup link.
         </p>
       </div>
     </div>

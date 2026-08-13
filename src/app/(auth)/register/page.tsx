@@ -198,7 +198,7 @@ export default async function RegisterPage({
           <form action={signUpFromRegisterForm} className="mt-8 space-y-4">
             <input type="hidden" name="packageId" value={packageId} />
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-              Already have an account? <Link href="/login" className="font-medium underline">Sign in</Link> first. Company owners can register here; team members are added by an owner inside the app.
+              Already have an account? <Link href="/login" className="font-medium underline">Sign in</Link> first. If the password is wrong, we’ll email a setup link so you can choose a new one and continue.
             </div>
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
               {selectedPackage.name} (monthly) — payment simulated as approved.

@@ -1,9 +1,16 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { buildAuthConfirmUrl } from "@/lib/auth-links";
-import { sendPasswordResetEmail } from "@/lib/email";
+import {
+  sendCompanySetupLinkEmail,
+  sendPasswordResetEmail,
+} from "@/lib/email";
 
-export async function generateAndSendPasswordResetEmail(email: string) {
-  const trimmed = email.trim();
+async function generateLinkAndEmail(args: {
+  email: string;
+  subjectKind: "reset" | "setup";
+  next: string;
+}) {
+  const trimmed = args.email.trim();
   if (!trimmed) {
     return { error: "Enter your email address." };
   }
@@ -14,7 +21,9 @@ export async function generateAndSendPasswordResetEmail(email: string) {
   } catch {
     return {
       error:
-        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable password-reset emails.",
+        args.subjectKind === "setup"
+          ? "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable setup-link emails."
+          : "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable password-reset emails.",
     };
   }
 
@@ -25,7 +34,11 @@ export async function generateAndSendPasswordResetEmail(email: string) {
     });
 
     if (linkErr || !data?.user) {
-      const message = linkErr?.message ?? "Could not create a reset link.";
+      const message =
+        linkErr?.message ??
+        (args.subjectKind === "setup"
+          ? "Could not create a setup link."
+          : "Could not create a reset link.");
       if (/already.*register|already.*exist|email_exists|duplicate/i.test(message)) {
         return {
           error:
@@ -37,20 +50,50 @@ export async function generateAndSendPasswordResetEmail(email: string) {
 
     const tokenHash = data.properties?.hashed_token;
     if (!tokenHash) {
-      return { error: "Could not build reset link." };
+      return {
+        error:
+          args.subjectKind === "setup"
+            ? "Could not build setup link."
+            : "Could not build reset link.",
+      };
     }
 
-    const resetUrl = buildAuthConfirmUrl({
+    const linkUrl = buildAuthConfirmUrl({
       tokenHash,
       type: "recovery",
-      next: "/auth/reset-password",
+      next: args.next,
     });
 
-    await sendPasswordResetEmail({ to: trimmed, resetUrl });
+    if (args.subjectKind === "setup") {
+      await sendCompanySetupLinkEmail({ to: trimmed, setupUrl: linkUrl });
+    } else {
+      await sendPasswordResetEmail({ to: trimmed, resetUrl: linkUrl });
+    }
     return { error: null };
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : "Could not create a reset link.",
+      error:
+        error instanceof Error
+          ? error.message
+          : args.subjectKind === "setup"
+            ? "Could not create a setup link."
+            : "Could not create a reset link.",
     };
   }
+}
+
+export async function generateAndSendPasswordResetEmail(email: string) {
+  return generateLinkAndEmail({
+    email,
+    subjectKind: "reset",
+    next: "/auth/reset-password",
+  });
+}
+
+export async function generateAndSendCompanySetupLink(email: string) {
+  return generateLinkAndEmail({
+    email,
+    subjectKind: "setup",
+    next: "/auth/reset-password",
+  });
 }

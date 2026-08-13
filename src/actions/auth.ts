@@ -13,7 +13,10 @@ import {
   tenantPlanValue,
   type PackageId,
 } from "@/lib/plans";
-import { generateAndSendPasswordResetEmail } from "@/lib/password-reset";
+import {
+  generateAndSendCompanySetupLink,
+  generateAndSendPasswordResetEmail,
+} from "@/lib/password-reset";
 import type { UserRole } from "@/types/database";
 
 const redis = new Redis({
@@ -325,6 +328,16 @@ export async function signUp(
         password,
       });
     if (signInError || !signInData.user) {
+      if (/invalid login credentials/i.test(signInError?.message ?? "")) {
+        const setupLinkResult = await generateAndSendCompanySetupLink(email);
+        if (!setupLinkResult.error) {
+          return {
+            data: null,
+            error:
+              "We couldn’t verify that password, so we emailed you a link to continue setup. Open that email, choose a new password, then try the company signup again.",
+          };
+        }
+      }
       return {
         data: null,
         error: signInError?.message ?? "Could not sign in with the existing account.",

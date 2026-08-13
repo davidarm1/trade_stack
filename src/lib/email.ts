@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { Resend } from "resend";
 import { InviteEmail } from "@/emails/InviteEmail";
 import { PasswordResetEmail } from "@/emails/PasswordResetEmail";
+import { CompanySetupLinkEmail } from "@/emails/CompanySetupLinkEmail";
 
 function getRequiredEnv(name: string): string | null {
   const value = process.env[name]?.trim();
@@ -95,13 +96,37 @@ export async function sendPasswordResetEmail(args: {
   resetUrl: string;
 }) {
   const subject = "Reset your Trade Stack Cloud password";
-  const html = await renderEmail(createElement(PasswordResetEmail, { resetUrl: args.resetUrl }));
+  const html = await renderEmail(
+    createElement(PasswordResetEmail, { resetUrl: args.resetUrl }),
+  );
   const text = [
     `Trade Stack Cloud`,
     "",
     "You requested a password reset for your Trade Stack Cloud account.",
     "",
     `Reset my password: ${args.resetUrl}`,
+    "",
+    "This link expires in 1 hour.",
+    "If you didn’t request this, you can safely ignore this email.",
+  ].join("\n");
+
+  await sendAuthEmail({ to: args.to, subject, html, text });
+}
+
+export async function sendCompanySetupLinkEmail(args: {
+  to: string;
+  setupUrl: string;
+}) {
+  const subject = "Continue setting up your Trade Stack Cloud company";
+  const html = await renderEmail(
+    createElement(CompanySetupLinkEmail, { setupUrl: args.setupUrl }),
+  );
+  const text = [
+    `Trade Stack Cloud`,
+    "",
+    "We couldn’t finish creating your account with the password you entered.",
+    "",
+    `Continue setup: ${args.setupUrl}`,
     "",
     "This link expires in 1 hour.",
     "If you didn’t request this, you can safely ignore this email.",
