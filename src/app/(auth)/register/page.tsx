@@ -55,7 +55,7 @@ export default async function RegisterPage({
           {step === 1 && "Choose your package"}
           {step === 2 && "Monthly billing"}
           {step === 3 && "Payment"}
-          {step === 4 && "Create your account"}
+          {step === 4 && "Owner signup"}
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           {step === 1 && "Select the plan that fits your business."}
@@ -64,7 +64,7 @@ export default async function RegisterPage({
           {step === 3 &&
             "Test checkout: use card number 63430 to simulate a successful payment."}
           {step === 4 &&
-            "Your workspace will use the package and billing you selected."}
+            "Owners register their company here. Office staff and engineers are added inside the app by a company owner."}
         </p>
 
         {step === 1 && (
@@ -197,6 +197,9 @@ export default async function RegisterPage({
         {step === 4 && packageId && selectedPackage && (
           <form action={signUpFromRegisterForm} className="mt-8 space-y-4">
             <input type="hidden" name="packageId" value={packageId} />
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+              Already have an account? <Link href="/login" className="font-medium underline">Sign in</Link> first. Company owners can register here; team members are added by an owner inside the app.
+            </div>
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
               {selectedPackage.name} (monthly) — payment simulated as approved.
             </div>
@@ -277,7 +280,7 @@ export default async function RegisterPage({
                 type="submit"
                 className="flex-1 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
               >
-                Create account
+                Create owner account
               </button>
             </div>
           </form>
@@ -288,6 +291,7 @@ export default async function RegisterPage({
           <Link href="/login" className="font-medium text-slate-900 underline">
             Sign in
           </Link>
+          {" "}first, then create your new company.
         </p>
       </div>
     </div>

@@ -123,6 +123,7 @@ function LoginForm() {
           <Link href="/register" className="font-medium text-slate-900 underline">
             Sign up
           </Link>
+          {" "}if you are an owner creating a company. Team members are added by a company owner inside the app.
         </p>
       </div>
     </div>

@@ -289,91 +289,163 @@ export async function signUp(
   plan: string,
 ) {
   const admin = createServiceRoleClient();
+  const now = new Date().toISOString();
 
-  // Create auth user first via Admin API so `auth.users` exists before
-  // `public.users` (FK users_id_fkey → auth.users). Server `auth.signUp()`
-  // can race the DB so the profile insert sometimes violates the FK.
-  const { data: created, error: createAuthError } =
-    await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name, company_name: companyName },
-    });
-
-  if (createAuthError || !created.user) {
-    const msg = createAuthError?.message ?? "Could not create auth user";
-    if (/already been registered|already exists/i.test(msg)) {
-      return {
-        data: null,
-        error:
-          "An account with this email already exists. Try signing in instead.",
-      };
-    }
-    return { data: null, error: msg };
-  }
-
-  const userId = created.user.id;
-
-  let slug = slugify(companyName);
-  const { data: dup } = await admin
-    .from("tenants")
-    .select("id")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (dup) {
-    slug = `${slug}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  const { data: tenant, error: tenantError } = await admin
-    .from("tenants")
-    .insert({
-      name: companyName,
-      slug,
-      plan,
-      is_active: true,
-    })
-    .select("id")
-    .single();
-
-  if (tenantError || !tenant) {
-    await admin.auth.admin.deleteUser(userId);
-    return {
-      data: null,
-      error: tenantError?.message ?? "Failed to create tenant",
-    };
-  }
-
-  const { error: userError } = await admin.from("users").insert({
-    id: userId,
-    tenant_id: tenant.id,
-    name,
-    email,
-    role: "owner",
-    is_active: true,
-  });
-
-  if (userError) {
-    await admin.from("tenants").delete().eq("id", tenant.id);
-    await admin.auth.admin.deleteUser(userId);
-    return { data: null, error: userError.message };
-  }
-
-  // Session cookies for the browser (Admin API does not create a session)
-  const supabase = await createClient();
-  const { error: sessionError } = await supabase.auth.signInWithPassword({
+  const createAuthResult = await admin.auth.admin.createUser({
     email,
     password,
+    email_confirm: true,
+    user_metadata: { name, company_name: companyName },
   });
-  if (sessionError) {
-    return {
-      data: null,
-      error: `${sessionError.message} (account was created — try signing in manually)`,
+
+  let userId: string | null = null;
+  let needsSessionSignIn = false;
+
+  if (createAuthResult.error || !createAuthResult.data.user) {
+    const msg = createAuthResult.error?.message ?? "Could not create auth user";
+    if (!/already been registered|already exists/i.test(msg)) {
+      return { data: null, error: msg };
+    }
+
+    const supabase = await createClient();
+    const { data: signInData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+    if (signInError || !signInData.user) {
+      return {
+        data: null,
+        error: signInError?.message ?? "Could not sign in with the existing account.",
+      };
+    }
+
+    userId = signInData.user.id;
+  } else {
+    userId = createAuthResult.data.user.id;
+    needsSessionSignIn = true;
+  }
+
+  const provisionCompany = async (resolvedUserId: string) => {
+    let slug = slugify(companyName);
+    const { data: dup } = await admin
+      .from("tenants")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (dup) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    const { data: tenant, error: tenantError } = await admin
+      .from("tenants")
+      .insert({
+        name: companyName,
+        slug,
+        plan,
+        is_active: true,
+      })
+      .select("id")
+      .single();
+
+    if (tenantError || !tenant) {
+      return { data: null, error: tenantError?.message ?? "Failed to create tenant" };
+    }
+
+    const profilePatch = {
+      id: resolvedUserId,
+      tenant_id: tenant.id,
+      active_company_id: tenant.id,
+      name,
+      email,
+      role: "owner" as const,
+      is_active: true,
+      leaver_at: null,
+      updated_at: now,
     };
+
+    const { error: userError } = await admin.from("users").upsert(profilePatch, {
+      onConflict: "id",
+    });
+    if (userError) {
+      await admin.from("tenants").delete().eq("id", tenant.id);
+      return { data: null, error: userError.message };
+    }
+
+    const { data: membership, error: membershipError } = await admin
+      .from("memberships")
+      .insert({
+        user_id: resolvedUserId,
+        company_id: tenant.id,
+        role: "owner",
+        status: "active",
+        display_name: name,
+        job_title: null,
+        employee_ref: null,
+        work_phone: null,
+        concurrent_allowed: false,
+      })
+      .select("id")
+      .single();
+
+    if (membershipError || !membership) {
+      await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+      await admin.from("tenants").delete().eq("id", tenant.id);
+      return {
+        data: null,
+        error: membershipError?.message ?? "Failed to create company membership",
+      };
+    }
+
+    const { error: spellError } = await admin.from("membership_spells").insert({
+      membership_id: membership.id,
+      joined_at: now,
+      left_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+    if (spellError) {
+      await admin.from("memberships").delete().eq("id", membership.id);
+      await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+      await admin.from("tenants").delete().eq("id", tenant.id);
+      return { data: null, error: spellError.message };
+    }
+
+    return { data: { tenantId: tenant.id, userId: resolvedUserId }, error: null };
+  };
+
+  const provisioned = await provisionCompany(userId);
+  if (provisioned.error || !provisioned.data) {
+    if (needsSessionSignIn && userId) {
+      // Existing-account sign-in already happened; keep the signed-in state.
+    } else if (userId) {
+      await admin.auth.admin.deleteUser(userId);
+    }
+    return { data: null, error: provisioned.error ?? "Failed to provision company" };
+  }
+
+  if (needsSessionSignIn) {
+    // Existing-account path already has an active session from the sign-in above.
+  } else {
+    const supabase = await createClient();
+    const { error: sessionError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (sessionError) {
+      await admin.from("memberships").delete().eq("user_id", userId).eq("company_id", provisioned.data.tenantId);
+      await admin.from("users").delete().eq("id", userId).eq("tenant_id", provisioned.data.tenantId);
+      await admin.from("tenants").delete().eq("id", provisioned.data.tenantId);
+      await admin.auth.admin.deleteUser(userId);
+      return {
+        data: null,
+        error: `${sessionError.message} (account was created — try signing in manually)`,
+      };
+    }
   }
 
   revalidatePath("/", "layout");
-  return { data: { userId, tenantId: tenant.id }, error: null };
+  return { data: { userId, tenantId: provisioned.data.tenantId }, error: null };
 }
 
 export async function signOut() {
