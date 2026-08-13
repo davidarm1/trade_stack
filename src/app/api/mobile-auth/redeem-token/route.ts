@@ -244,17 +244,6 @@ async function redeemTokenForMobileSession(token: string, request: Request) {
     .maybeSingle();
   if (profileError) return json({ error: profileError.message }, { status: 500 });
   if (!profile?.email) return invalidToken(request, token, "missing_profile_email");
-  if (profile.is_active === false) {
-    await logMobileRedemptionFailure({
-      request,
-      token,
-      reason: "account_inactive",
-      tenant_id: match.tenant_id,
-      user_id: match.user_id,
-    });
-    return json({ error: "Account inactive" }, { status: 403 });
-  }
-
   const { data: redeemed, error: updErr } = await admin
     .from("mobile_access_tokens")
     .update({ used_at: nowIso })

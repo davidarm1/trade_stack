@@ -307,6 +307,17 @@ export async function signUp(
       return { data: null, error: msg };
     }
 
+    const { data: existingUser } = await admin
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (existingUser?.id) {
+      await admin.auth.admin.updateUserById(existingUser.id, {
+        ban_duration: "none",
+      });
+    }
+
     const supabase = await createClient();
     const { data: signInData, error: signInError } =
       await supabase.auth.signInWithPassword({

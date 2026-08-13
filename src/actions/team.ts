@@ -159,7 +159,7 @@ async function getTeamMemberForTenant(
   };
 }
 
-async function syncTeamMemberAuthState(userId: string, active: boolean) {
+async function syncTeamMemberAuthState(userId: string) {
   let admin: ReturnType<typeof createServiceRoleClient>;
   try {
     admin = createServiceRoleClient();
@@ -170,8 +170,10 @@ async function syncTeamMemberAuthState(userId: string, active: boolean) {
     };
   }
 
+  // Keep the global auth account usable. Company access is enforced by
+  // memberships and tenant-scoped RLS, not by banning auth users.
   const { error } = await admin.auth.admin.updateUserById(userId, {
-    ban_duration: active ? "none" : "87600h",
+    ban_duration: "none",
   });
   return { error: error?.message ?? null };
 }
@@ -355,7 +357,7 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
       return { data: null, error: permission.reason };
     }
     const nextActive = (data.is_active ?? target.is_active) as boolean;
-    const authResult = await syncTeamMemberAuthState(target.id, nextActive);
+    const authResult = await syncTeamMemberAuthState(target.id);
     if (authResult.error) {
       return { data: null, error: authResult.error };
     }
@@ -384,7 +386,7 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
 
   if (error) {
     if (activeChanged) {
-      const rollback = await syncTeamMemberAuthState(target.id, target.is_active);
+      const rollback = await syncTeamMemberAuthState(target.id);
       if (rollback.error) {
         console.error("Failed to rollback team member auth state after DB update failure.", {
           userId: id,
@@ -506,7 +508,7 @@ async function updateTeamMemberAuthAndProfile(args: {
     return { success: false, error: permission.reason };
   }
 
-  const authResult = await syncTeamMemberAuthState(userId, nextActive);
+  const authResult = await syncTeamMemberAuthState(userId);
   if (authResult.error) {
     return { success: false, error: authResult.error };
   }
@@ -521,7 +523,7 @@ async function updateTeamMemberAuthAndProfile(args: {
     .eq("tenant_id", actor.tenantId);
 
   if (error) {
-    const rollback = await syncTeamMemberAuthState(userId, !nextActive);
+    const rollback = await syncTeamMemberAuthState(userId);
     if (rollback.error) {
       console.error("Failed to rollback auth state after team member status update failed.", {
         userId,

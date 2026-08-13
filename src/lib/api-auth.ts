@@ -67,13 +67,6 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
         ),
       };
     }
-    if (profile.is_active === false) {
-      return {
-        ok: false,
-        response: NextResponse.json({ error: "Account inactive" }, { status: 403 }),
-      };
-    }
-
     const { data: membership } = await supabase
       .from("memberships")
       .select("id")
@@ -119,13 +112,6 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
       ),
     };
   }
-  if (profile.is_active === false) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: "Account inactive" }, { status: 403 }),
-    };
-  }
-
   const { data: membership } = await supabase
     .from("memberships")
     .select("id")
