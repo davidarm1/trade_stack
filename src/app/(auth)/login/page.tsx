@@ -119,11 +119,11 @@ function LoginForm() {
           </button>
         </form>
         <p className="mt-6 text-center text-sm text-slate-600">
-          No account?{" "}
+          Starting a new company?{" "}
           <Link href="/register" className="font-medium text-slate-900 underline">
             Sign up
           </Link>
-          {" "}if you are an owner creating a company. If the password is wrong, use Forgot password and we’ll email a setup link.
+          {" "}as the owner. If you already used this email before, use Forgot password and we’ll email a setup link.
         </p>
       </div>
     </div>
