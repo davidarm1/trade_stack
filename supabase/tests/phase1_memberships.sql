@@ -232,7 +232,7 @@ BEGIN
 
   -- Scenario 1: fresh active membership in Tenant C sees an empty job list.
   UPDATE public.users
-  SET active_company_id = tenant_c,
+  SET tenant_id = tenant_c,
       updated_at = created_at
   WHERE id = user_id;
 
@@ -260,7 +260,7 @@ BEGIN
     AND left_at IS NULL;
 
   UPDATE public.users
-  SET active_company_id = tenant_b,
+  SET tenant_id = tenant_b,
       leaver_at = created_at + interval '1 day',
       updated_at = created_at + interval '1 day'
   WHERE id = user_id;
@@ -322,7 +322,7 @@ BEGIN
   );
 
   UPDATE public.users
-  SET active_company_id = tenant_a,
+  SET tenant_id = tenant_a,
       leaver_at = NULL,
       updated_at = created_at + interval '2 days'
   WHERE id = user_id;

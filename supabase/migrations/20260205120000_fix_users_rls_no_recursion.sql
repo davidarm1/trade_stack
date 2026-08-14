@@ -12,7 +12,7 @@ AS $$
   JOIN public.users u
     ON u.id = auth.uid()
   WHERE m.user_id = auth.uid()
-    AND m.company_id = u.active_company_id
+    AND m.company_id = u.tenant_id
     AND m.status = 'active'
   ORDER BY m.updated_at DESC, m.created_at DESC
   LIMIT 1;

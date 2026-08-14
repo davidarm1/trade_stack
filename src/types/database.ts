@@ -54,7 +54,6 @@ export interface UserRow {
   avatar_url: string | null;
   locale: string | null;
   theme: string | null;
-  active_company_id: string | null;
   account_type: string | null;
   created_at: string;
   updated_at: string;

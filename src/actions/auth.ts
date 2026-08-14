@@ -383,7 +383,6 @@ export async function signUp(
     const profilePatch = {
       id: resolvedUserId,
       tenant_id: tenant.id,
-      active_company_id: tenant.id,
       name,
       email,
       role: "owner" as const,
