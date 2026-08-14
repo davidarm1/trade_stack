@@ -23,6 +23,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     .eq("status", "active")
     .order("updated_at", { ascending: false })
     .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (membershipError) {

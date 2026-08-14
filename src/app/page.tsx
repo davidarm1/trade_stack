@@ -16,6 +16,9 @@ export default async function Home() {
     .select("id")
     .eq("user_id", user.id)
     .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!membership?.id) {

@@ -52,6 +52,16 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
       };
     }
 
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("id, company_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("tenant_id, is_active, role")
@@ -67,20 +77,13 @@ export async function getSessionTenantOrError(): Promise<SessionTenantResult> {
         ),
       };
     }
-    const { data: membership } = await supabase
-      .from("memberships")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("company_id", profile.tenant_id)
-      .in("status", ["active", "leaver"])
-      .maybeSingle();
 
     return {
       ok: true,
       supabase,
       userId: user.id,
       membershipId: membership?.id ?? null,
-      tenantId: profile.tenant_id,
+      tenantId: membership?.company_id ?? profile.tenant_id,
       role: (profile.role as UserRole | null) ?? null,
     };
   }

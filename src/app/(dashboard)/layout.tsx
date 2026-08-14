@@ -31,6 +31,7 @@ export default async function DashboardLayout({
     .eq("status", "active")
     .order("updated_at", { ascending: false })
     .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!membership?.company_id) {
