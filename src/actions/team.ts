@@ -159,23 +159,71 @@ async function getTeamMemberForTenant(
   };
 }
 
-async function syncTeamMemberAuthState(userId: string) {
-  let admin: ReturnType<typeof createServiceRoleClient>;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    return {
-      error:
-        "Missing SUPABASE_SERVICE_ROLE_KEY on the server. Add it to enable team member auth updates.",
-    };
+async function syncTeamMemberMembershipState(
+  userId: string,
+  tenantId: string,
+  isActive: boolean,
+) {
+  const admin = createServiceRoleClient();
+  const now = new Date().toISOString();
+
+  const { data: membership, error } = await admin
+    .from("memberships")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("company_id", tenantId)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message };
   }
 
-  // Keep the global auth account usable. Company access is enforced by
-  // memberships and tenant-scoped RLS, not by banning auth users.
-  const { error } = await admin.auth.admin.updateUserById(userId, {
-    ban_duration: "none",
-  });
-  return { error: error?.message ?? null };
+  if (!membership?.id) {
+    return { error: null };
+  }
+
+  if (isActive) {
+    const { error: membershipError } = await admin
+      .from("memberships")
+      .update({ status: "active", updated_at: now })
+      .eq("id", membership.id);
+    if (membershipError) return { error: membershipError.message };
+
+    const { data: openSpell } = await admin
+      .from("membership_spells")
+      .select("id")
+      .eq("membership_id", membership.id)
+      .is("left_at", null)
+      .maybeSingle();
+
+    if (!openSpell) {
+      const { error: spellError } = await admin.from("membership_spells").insert({
+        membership_id: membership.id,
+        joined_at: now,
+        left_at: null,
+        created_at: now,
+        updated_at: now,
+      });
+      if (spellError) return { error: spellError.message };
+    }
+
+    return { error: null };
+  }
+
+  const { error: membershipError } = await admin
+    .from("memberships")
+    .update({ status: "leaver", updated_at: now })
+    .eq("id", membership.id);
+  if (membershipError) return { error: membershipError.message };
+
+  const { error: spellError } = await admin
+    .from("membership_spells")
+    .update({ left_at: now, updated_at: now })
+    .eq("membership_id", membership.id)
+    .is("left_at", null);
+  if (spellError) return { error: spellError.message };
+
+  return { error: null };
 }
 
 export async function inviteTeamMember(
@@ -357,9 +405,13 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
       return { data: null, error: permission.reason };
     }
     const nextActive = (data.is_active ?? target.is_active) as boolean;
-    const authResult = await syncTeamMemberAuthState(target.id);
-    if (authResult.error) {
-      return { data: null, error: authResult.error };
+    const membershipResult = await syncTeamMemberMembershipState(
+      target.id,
+      actor.tenantId,
+      nextActive,
+    );
+    if (membershipResult.error) {
+      return { data: null, error: membershipResult.error };
     }
   }
 
@@ -386,9 +438,13 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
 
   if (error) {
     if (activeChanged) {
-      const rollback = await syncTeamMemberAuthState(target.id);
+      const rollback = await syncTeamMemberMembershipState(
+        target.id,
+        actor.tenantId,
+        target.is_active,
+      );
       if (rollback.error) {
-        console.error("Failed to rollback team member auth state after DB update failure.", {
+        console.error("Failed to rollback membership state after team member status update failed.", {
           userId: id,
           error: rollback.error,
         });
@@ -508,9 +564,13 @@ async function updateTeamMemberAuthAndProfile(args: {
     return { success: false, error: permission.reason };
   }
 
-  const authResult = await syncTeamMemberAuthState(userId);
-  if (authResult.error) {
-    return { success: false, error: authResult.error };
+  const membershipResult = await syncTeamMemberMembershipState(
+    userId,
+    actor.tenantId,
+    nextActive,
+  );
+  if (membershipResult.error) {
+    return { success: false, error: membershipResult.error };
   }
 
   const { error } = await supabase
@@ -523,9 +583,13 @@ async function updateTeamMemberAuthAndProfile(args: {
     .eq("tenant_id", actor.tenantId);
 
   if (error) {
-    const rollback = await syncTeamMemberAuthState(userId);
+    const rollback = await syncTeamMemberMembershipState(
+      userId,
+      actor.tenantId,
+      !nextActive,
+    );
     if (rollback.error) {
-      console.error("Failed to rollback auth state after team member status update failed.", {
+      console.error("Failed to rollback membership state after team member status update failed.", {
         userId,
         error: rollback.error,
       });

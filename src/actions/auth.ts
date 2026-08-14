@@ -380,6 +380,8 @@ export async function signUp(
       return { data: null, error: tenantError?.message ?? "Failed to create tenant" };
     }
 
+    const now = new Date().toISOString();
+
     const profilePatch = {
       id: resolvedUserId,
       tenant_id: tenant.id,
@@ -399,43 +401,131 @@ export async function signUp(
       return { data: null, error: userError.message };
     }
 
-    const { data: membership, error: membershipError } = await admin
-      .from("memberships")
-      .insert({
-        user_id: resolvedUserId,
-        company_id: tenant.id,
-        role: "owner",
-        status: "active",
-        display_name: name,
-        job_title: null,
-        employee_ref: null,
-        work_phone: null,
-        concurrent_allowed: false,
-      })
-      .select("id")
-      .single();
 
-    if (membershipError || !membership) {
+    const { error: liveMembershipError } = await admin
+      .from("memberships")
+      .select("id")
+      .eq("user_id", resolvedUserId)
+      .in("status", ["active", "invited"])
+      .eq("concurrent_allowed", false);
+    if (liveMembershipError) {
       await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
       await admin.from("tenants").delete().eq("id", tenant.id);
-      return {
-        data: null,
-        error: membershipError?.message ?? "Failed to create company membership",
-      };
+      return { data: null, error: liveMembershipError.message };
     }
 
-    const { error: spellError } = await admin.from("membership_spells").insert({
-      membership_id: membership.id,
-      joined_at: now,
-      left_at: null,
-      created_at: now,
-      updated_at: now,
-    });
-    if (spellError) {
-      await admin.from("memberships").delete().eq("id", membership.id);
+    const { data: liveMemberships, error: liveMembershipsError } = await admin
+      .from("memberships")
+      .select("id, company_id")
+      .eq("user_id", resolvedUserId)
+      .in("status", ["active", "invited"])
+      .eq("concurrent_allowed", false);
+    if (liveMembershipsError) {
       await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
       await admin.from("tenants").delete().eq("id", tenant.id);
-      return { data: null, error: spellError.message };
+      return { data: null, error: liveMembershipsError.message };
+    }
+
+    for (const liveMembership of liveMemberships ?? []) {
+      if (liveMembership.company_id === tenant.id) continue;
+      const { error: revokeError } = await admin
+        .from("memberships")
+        .update({ status: "leaver", updated_at: now })
+        .eq("id", liveMembership.id);
+      if (revokeError) {
+        await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+        await admin.from("tenants").delete().eq("id", tenant.id);
+        return { data: null, error: revokeError.message };
+      }
+      await admin
+        .from("membership_spells")
+        .update({ left_at: now, updated_at: now })
+        .eq("membership_id", liveMembership.id)
+        .is("left_at", null);
+    }
+
+    const { data: existingMembership, error: existingMembershipError } = await admin
+      .from("memberships")
+      .select("id")
+      .eq("user_id", resolvedUserId)
+      .eq("company_id", tenant.id)
+      .maybeSingle();
+
+    if (existingMembershipError) {
+      await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+      await admin.from("tenants").delete().eq("id", tenant.id);
+      return { data: null, error: existingMembershipError.message };
+    }
+
+    let membershipId = existingMembership?.id ?? null;
+    if (membershipId) {
+      const { error: membershipUpdateError } = await admin
+        .from("memberships")
+        .update({
+          role: "owner",
+          status: "active",
+          display_name: name,
+          job_title: null,
+          employee_ref: null,
+          work_phone: null,
+          concurrent_allowed: false,
+          updated_at: now,
+        })
+        .eq("id", membershipId);
+      if (membershipUpdateError) {
+        await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+        await admin.from("tenants").delete().eq("id", tenant.id);
+        return { data: null, error: membershipUpdateError.message };
+      }
+    } else {
+      const { data: membership, error: membershipError } = await admin
+        .from("memberships")
+        .insert({
+          user_id: resolvedUserId,
+          company_id: tenant.id,
+          role: "owner",
+          status: "active",
+          display_name: name,
+          job_title: null,
+          employee_ref: null,
+          work_phone: null,
+          concurrent_allowed: false,
+        })
+        .select("id")
+        .single();
+
+      if (membershipError || !membership) {
+        await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+        await admin.from("tenants").delete().eq("id", tenant.id);
+        return {
+          data: null,
+          error: membershipError?.message ?? "Failed to create company membership",
+        };
+      }
+      membershipId = membership.id;
+    }
+
+    const { data: openSpell } = await admin
+      .from("membership_spells")
+      .select("id")
+      .eq("membership_id", membershipId)
+      .is("left_at", null)
+      .maybeSingle();
+
+    if (!openSpell) {
+      const { error: spellError } = await admin.from("membership_spells").insert({
+        membership_id: membershipId,
+        joined_at: now,
+        left_at: null,
+        created_at: now,
+        updated_at: now,
+      });
+      if (spellError) {
+        await admin.from("memberships").delete().eq("id", membershipId);
+        await admin.from("users").delete().eq("id", resolvedUserId).eq("tenant_id", tenant.id);
+        await admin.from("tenants").delete().eq("id", tenant.id);
+        return { data: null, error: spellError.message };
+      }
     }
 
     return { data: { tenantId: tenant.id, userId: resolvedUserId }, error: null };
