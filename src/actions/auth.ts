@@ -542,8 +542,6 @@ export async function signUp(
   }
 
   if (needsSessionSignIn) {
-    // Existing-account path already has an active session from the sign-in above.
-  } else {
     const supabase = await createClient();
     const { error: sessionError } = await supabase.auth.signInWithPassword({
       email,
