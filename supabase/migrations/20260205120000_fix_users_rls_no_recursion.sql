@@ -2,17 +2,33 @@
 
 CREATE OR REPLACE FUNCTION public.current_user_membership_id()
 RETURNS uuid
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT m.id
-  FROM public.memberships m
-  WHERE m.user_id = auth.uid()
-    AND m.status = 'active'
-  ORDER BY m.updated_at DESC, m.created_at DESC
-  LIMIT 1;
+DECLARE
+  v_membership_id uuid;
+BEGIN
+  IF to_regclass('public.memberships') IS NOT NULL THEN
+    SELECT m.id
+    INTO v_membership_id
+    FROM public.memberships m
+    WHERE m.user_id = auth.uid()
+      AND m.status = 'active'
+    ORDER BY m.updated_at DESC, m.created_at DESC
+    LIMIT 1;
+
+    RETURN v_membership_id;
+  END IF;
+
+  SELECT u.active_company_id
+  INTO v_membership_id
+  FROM public.users u
+  WHERE u.id = auth.uid();
+
+  RETURN v_membership_id;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.current_user_membership_id() FROM PUBLIC;
@@ -21,15 +37,31 @@ GRANT EXECUTE ON FUNCTION public.current_user_membership_id() TO service_role;
 
 CREATE OR REPLACE FUNCTION public.current_user_tenant_id()
 RETURNS uuid
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT company_id
-  FROM public.memberships
-  WHERE id = public.current_user_membership_id()
-  LIMIT 1;
+DECLARE
+  v_tenant_id uuid;
+BEGIN
+  IF to_regclass('public.memberships') IS NOT NULL THEN
+    SELECT m.company_id
+    INTO v_tenant_id
+    FROM public.memberships m
+    WHERE m.id = public.current_user_membership_id()
+    LIMIT 1;
+
+    RETURN v_tenant_id;
+  END IF;
+
+  SELECT u.tenant_id
+  INTO v_tenant_id
+  FROM public.users u
+  WHERE u.id = auth.uid();
+
+  RETURN v_tenant_id;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.current_user_tenant_id() FROM PUBLIC;

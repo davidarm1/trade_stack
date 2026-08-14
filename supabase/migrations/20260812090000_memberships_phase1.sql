@@ -221,7 +221,17 @@ WHERE EXISTS (
 )
   AND m.concurrent_allowed = false;
 
-ALTER TABLE public.membership_spells
-  ADD CONSTRAINT membership_spells_joined_before_left_check
-  CHECK (left_at IS NULL OR left_at >= joined_at);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'membership_spells_joined_before_left_check'
+      AND conrelid = 'public.membership_spells'::regclass
+  ) THEN
+    ALTER TABLE public.membership_spells
+      ADD CONSTRAINT membership_spells_joined_before_left_check
+      CHECK (left_at IS NULL OR left_at >= joined_at);
+  END IF;
+END $$;
 

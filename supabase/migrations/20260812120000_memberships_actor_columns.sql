@@ -268,10 +268,21 @@ CREATE INDEX IF NOT EXISTS email_templates_created_by_membership_id_idx
 ALTER TABLE public.email_campaigns
   ADD COLUMN IF NOT EXISTS sent_by_membership_id uuid REFERENCES public.memberships(id) ON DELETE SET NULL;
 
-UPDATE public.email_campaigns ec
-SET sent_by_membership_id = public.membership_id_for_company_user(ec.sent_by_id, ec.tenant_id)
-WHERE ec.sent_by_membership_id IS NULL
-  AND ec.sent_by_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'email_campaigns'
+      AND column_name = 'sent_by_id'
+  ) THEN
+    EXECUTE 'UPDATE public.email_campaigns ec
+             SET sent_by_membership_id = public.membership_id_for_company_user(ec.sent_by_id, ec.tenant_id)
+             WHERE ec.sent_by_membership_id IS NULL
+               AND ec.sent_by_id IS NOT NULL;';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS email_campaigns_sent_by_membership_id_idx
   ON public.email_campaigns (tenant_id, sent_by_membership_id);
