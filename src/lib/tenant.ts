@@ -16,36 +16,31 @@ export async function getTenantContext(): Promise<TenantContext> {
     return { success: false, error: "Not authenticated" };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("users")
-    .select("tenant_id")
-    .eq("id", user.id)
+  const { data: membership, error: membershipError } = await supabase
+    .from("memberships")
+    .select("id, company_id")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .maybeSingle();
 
-  if (profileError) {
-    return { success: false, error: profileError.message };
+  if (membershipError) {
+    return { success: false, error: membershipError.message };
   }
 
-  if (!profile?.tenant_id) {
+  if (!membership?.company_id) {
     return {
       success: false,
-      error: "No tenant profile — complete onboarding or contact support.",
+      error: "No active company access. Create or join a company to continue.",
     };
   }
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("company_id", profile.tenant_id)
-    .in("status", ["active", "leaver"])
-    .maybeSingle();
 
   return {
     success: true,
     userId: user.id,
-    tenantId: profile.tenant_id,
-    membershipId: membership?.id ?? null,
+    tenantId: membership.company_id,
+    membershipId: membership.id,
   };
 }
 

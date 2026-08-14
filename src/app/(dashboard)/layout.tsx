@@ -24,9 +24,22 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("company_id")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .maybeSingle();
+
+  if (!membership?.company_id) {
+    redirect("/register?step=4");
+  }
+
   const { data: profile } = await supabase
     .from("users")
-    .select("name, tenant_id, role")
+    .select("name, role")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -34,30 +47,29 @@ export default async function DashboardLayout({
   let logoUrl: string | null = null;
   let brandingShowLogo = false;
   let brandingShowCompanyName = true;
-  if (profile?.tenant_id) {
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("name, logo_url")
-      .eq("id", profile.tenant_id)
-      .maybeSingle();
-    companyName = tenant?.name ?? null;
-    logoUrl = tenant?.logo_url ?? null;
-    const { data: brandingRows } = await supabase
-      .from("settings")
-      .select("field_key, field_value")
-      .eq("tenant_id", profile.tenant_id)
-      .in("field_key", [
-        BRANDING_SHOW_LOGO_KEY,
-        BRANDING_SHOW_COMPANY_NAME_KEY,
-        BRANDING_USE_LOGO_LEGACY_KEY,
-      ]);
-    const brandingMap = Object.fromEntries(
-      (brandingRows ?? []).map((r) => [String(r.field_key), String(r.field_value ?? "")]),
-    );
-    const resolved = resolveBrandingFromSettings(brandingMap);
-    brandingShowLogo = resolved.showLogo;
-    brandingShowCompanyName = resolved.showName;
-  }
+  const tenantId = membership.company_id;
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("name, logo_url")
+    .eq("id", tenantId)
+    .maybeSingle();
+  companyName = tenant?.name ?? null;
+  logoUrl = tenant?.logo_url ?? null;
+  const { data: brandingRows } = await supabase
+    .from("settings")
+    .select("field_key, field_value")
+    .eq("tenant_id", tenantId)
+    .in("field_key", [
+      BRANDING_SHOW_LOGO_KEY,
+      BRANDING_SHOW_COMPANY_NAME_KEY,
+      BRANDING_USE_LOGO_LEGACY_KEY,
+    ]);
+  const brandingMap = Object.fromEntries(
+    (brandingRows ?? []).map((r) => [String(r.field_key), String(r.field_value ?? "")]),
+  );
+  const resolved = resolveBrandingFromSettings(brandingMap);
+  brandingShowLogo = resolved.showLogo;
+  brandingShowCompanyName = resolved.showName;
 
   const userRole = (profile?.role as UserRole | null) ?? null;
 

@@ -9,10 +9,7 @@ SET search_path = public
 AS $$
   SELECT m.id
   FROM public.memberships m
-  JOIN public.users u
-    ON u.id = auth.uid()
   WHERE m.user_id = auth.uid()
-    AND m.company_id = u.tenant_id
     AND m.status = 'active'
   ORDER BY m.updated_at DESC, m.created_at DESC
   LIMIT 1;
