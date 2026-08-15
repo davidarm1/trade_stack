@@ -34,21 +34,21 @@ export default async function DashboardLayout({
     .limit(1)
     .maybeSingle();
 
-  if (!membership?.company_id) {
-    redirect("/register?step=4");
-  }
-
   const { data: profile } = await supabase
     .from("users")
-    .select("name, role")
+    .select("name, role, tenant_id, is_active")
     .eq("id", user.id)
     .maybeSingle();
+
+  const tenantId = membership?.company_id ?? profile?.tenant_id ?? null;
+  if (!tenantId || profile?.is_active !== true) {
+    redirect("/register?step=4");
+  }
 
   let companyName: string | null = null;
   let logoUrl: string | null = null;
   let brandingShowLogo = false;
   let brandingShowCompanyName = true;
-  const tenantId = membership.company_id;
   const { data: tenant } = await supabase
     .from("tenants")
     .select("name, logo_url")

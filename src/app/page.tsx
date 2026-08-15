@@ -22,7 +22,15 @@ export default async function Home() {
     .maybeSingle();
 
   if (!membership?.id) {
-    redirect("/register?step=4");
+    const { data: profile } = await supabase
+      .from("users")
+      .select("tenant_id, is_active")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile?.tenant_id || profile.is_active !== true) {
+      redirect("/register?step=4");
+    }
   }
 
   redirect("/dashboard");

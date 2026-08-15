@@ -30,7 +30,26 @@ export async function getTenantContext(): Promise<TenantContext> {
     return { success: false, error: membershipError.message };
   }
 
-  if (!membership?.company_id) {
+  if (membership?.company_id) {
+    return {
+      success: true,
+      userId: user.id,
+      tenantId: membership.company_id,
+      membershipId: membership.id,
+    };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("users")
+    .select("tenant_id, is_active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    return { success: false, error: profileError.message };
+  }
+
+  if (!profile?.tenant_id || profile.is_active !== true) {
     return {
       success: false,
       error: "No active company access. Create or join a company to continue.",
@@ -40,8 +59,8 @@ export async function getTenantContext(): Promise<TenantContext> {
   return {
     success: true,
     userId: user.id,
-    tenantId: membership.company_id,
-    membershipId: membership.id,
+    tenantId: profile.tenant_id,
+    membershipId: null,
   };
 }
 
