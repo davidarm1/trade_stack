@@ -362,7 +362,7 @@ export async function GET(
   const tableX = margin;
   const tableW = width - margin * 2;
   const headerH = 26;
-  const rowH = 28;
+  const rowMinH = 28;
   const bottomReserve = 170;
   const itemLeft = tableX + 8;
   const itemMaxW = 260;
@@ -406,7 +406,7 @@ export async function GET(
       color: rgb(1, 1, 1),
       page,
     });
-    y -= headerH + 8;
+    y -= headerH + 10;
   }
 
   function addContinuationPage() {
@@ -429,6 +429,14 @@ export async function GET(
       ];
 
   rows.forEach((row, idx) => {
+    const qtyValue = row.quantity != null ? String(row.quantity) : "1";
+    const unitValue = asMoney(row.unit_price, currencyCode);
+    const lineValue = asMoney(row.total_price, currencyCode);
+    const itemLines = wrapText(text(row.description), itemMaxW, font, 9);
+    const lineHeight = 10;
+    const rowTextHeight = itemLines.length * lineHeight + 12;
+    const rowH = Math.max(rowMinH, rowTextHeight);
+
     if (y - rowH < margin + bottomReserve) {
       addContinuationPage();
     }
@@ -449,15 +457,20 @@ export async function GET(
       borderColor: BORDER,
       borderWidth: 0.5,
     });
-    const qtyValue = row.quantity != null ? String(row.quantity) : "1";
-    const unitValue = asMoney(row.unit_price, currencyCode);
-    const lineValue = asMoney(row.total_price, currencyCode);
-    const itemLines = wrapText(text(row.description), itemMaxW, font, 9);
-    page.drawText(itemLines[0] ?? "—", { x: itemLeft, y: y - 14, size: 9, font, color: TEXT });
+    const textTop = y - 14;
+    itemLines.forEach((line, lineIdx) => {
+      page.drawText(line, {
+        x: itemLeft,
+        y: textTop - lineIdx * lineHeight,
+        size: 9,
+        font,
+        color: TEXT,
+      });
+    });
     drawRightText({
       text: qtyValue,
       rightX: qtyRight,
-      y: y - 14,
+      y: textTop,
       size: 9,
       font,
       color: TEXT,
@@ -466,7 +479,7 @@ export async function GET(
     drawRightText({
       text: unitValue,
       rightX: unitRight,
-      y: y - 14,
+      y: textTop,
       size: 9,
       font,
       color: TEXT,
@@ -475,7 +488,7 @@ export async function GET(
     drawRightText({
       text: lineValue,
       rightX: lineRight,
-      y: y - 14,
+      y: textTop,
       size: 9,
       font,
       color: TEXT,
