@@ -332,7 +332,7 @@ export async function buildStoredInvoicePdf(args: {
   const subtotal = Number(job.subtotal ?? 0);
   const vatAmount = Number(job.vat_amount ?? 0);
   const total = Number(job.total_inc_vat ?? subtotal + vatAmount);
-  y -= 22;
+  y = rowY - 18;
   drawRight({
     page,
     font,
