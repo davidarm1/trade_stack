@@ -53,7 +53,6 @@ export async function getAssignableEngineers() {
         .from("memberships")
         .select("id, user_id, display_name, status, company_id")
         .eq("company_id", ctx.tenantId)
-        .eq("status", "active")
         .order("display_name", { ascending: true }),
     ]);
 
