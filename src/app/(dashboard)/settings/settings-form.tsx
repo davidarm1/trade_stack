@@ -310,10 +310,10 @@ export function SettingsForm({
                 className="mt-1 h-4 w-4 rounded border-slate-300"
               />
               <span>
-                <span className="block font-medium text-slate-900">VAT registered</span>
-                <span className="block text-xs text-slate-500">
-                  Turn this off if the company is not VAT registered. VAT fields and VAT lines on invoices will be hidden.
-                </span>
+              <span className="block font-medium text-slate-900">VAT registered</span>
+              <span className="block text-xs text-slate-500">
+                Turn this off if the company is not VAT registered. VAT number, default VAT rate, and VAT lines on invoices will be hidden.
+              </span>
               </span>
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
