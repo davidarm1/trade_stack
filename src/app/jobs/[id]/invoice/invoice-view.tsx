@@ -242,7 +242,9 @@ export function InvoiceView({
               <span>VAT ({invoice.vatRate}%)</span>
               <span>{money(invoice.vatAmount)}</span>
             </div>
-          ) : null}
+          ) : (
+            <p className="text-sm text-slate-500">VAT not charged</p>
+          )}
           <div className="flex items-center justify-between border-t border-slate-300 pt-2 text-base font-bold text-slate-900">
             <span>Total</span>
             <span>{money(invoice.total)}</span>

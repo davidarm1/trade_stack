@@ -490,6 +490,7 @@ export async function GET(
   const totalsValueRight = width - margin;
   const totalsLabelRight = totalsValueRight - 120;
   const vatLabel = vatRegistered ? `VAT (${vatRate.toFixed(2).replace(/\.00$/, "")}%)` : null;
+  const vatNote = vatRegistered ? null : "VAT not charged";
   for (const [label, value, isTotal] of [
     ["Subtotal", asMoney(subtotal, currencyCode), false],
     ...(vatLabel ? ([[vatLabel, asMoney(vatAmount, currencyCode), false] as const]) : []),
@@ -518,6 +519,15 @@ export async function GET(
     });
     y -= isTotal ? 18 : 14;
   }
+  if (vatNote) {
+    page.drawText(vatNote, {
+      x: totalsLabelRight - 8,
+      y: y + 2,
+      size: 8.5,
+      font,
+      color: TEXT,
+    });
+  }
 
   // FOOTER
   const footerY = margin + 18;
@@ -530,7 +540,7 @@ export async function GET(
   page.drawText(
     `${companyName ? `${companyName} • ` : ""}Payment terms: ${termsDays} days${
       tenant?.vat_number ? ` • VAT No: ${tenant.vat_number}` : ""
-    }`,
+    }${vatRegistered ? "" : " • VAT not charged"}`,
     { x: margin, y: footerY + 4, size: 8.5, font, color: TEXT },
   );
   if (!footerUsesBankDetails && bankLines.length > 0) {
