@@ -6,7 +6,8 @@ import { jobMatchesSearch } from "@/lib/job-number";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
 import { uploadToB2 } from "@/lib/b2";
-import { b2DownloadPathForKey } from "@/lib/b2-links";
+import { b2DownloadPathForKey, b2DownloadPathFromStoredValue } from "@/lib/b2-links";
+import { appOrigin } from "@/lib/auth-links";
 import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
 import { sendInvoiceEmail } from "@/lib/resend";
 import type { Job } from "@/types/database";
@@ -391,7 +392,7 @@ export async function sendJobInvoice(
 
   const { data: jobMeta, error: jobMetaErr } = await supabase
     .from("jobs")
-    .select("id, title, job_number, client_id")
+    .select("id, title, job_number, client_id, jobsheet_url")
     .eq("id", jobId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
@@ -463,11 +464,18 @@ export async function sendJobInvoice(
     title: String(jobMeta.title ?? "Invoice"),
   });
   const reasonText = trimmedReason ? `<p><strong>Reason for this version:</strong> ${trimmedReason}</p>` : "";
+  const appUrl = appOrigin();
+  const invoiceLink = new URL(downloadUrl, appUrl).toString();
+  const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
+  const jobSheetLink = storedJobSheetPath
+    ? new URL(storedJobSheetPath, appUrl).toString()
+    : `${appUrl}/jobs/${jobId}/job-sheet`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
       <p>Hello,</p>
       <p>Please find your invoice PDF attached. A secure download link is also included below:</p>
-      <p><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
+      <p><a href="${invoiceLink}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
+      <p><a href="${jobSheetLink}" target="_blank" rel="noopener noreferrer">Open job sheet</a></p>
       ${reasonText}
       <p>If you have any questions, please reply to this email.</p>
     </div>
@@ -477,7 +485,10 @@ export async function sendJobInvoice(
     "",
     "Please find your invoice PDF attached.",
     "A secure download link is included below:",
-    downloadUrl,
+    invoiceLink,
+    "",
+    "Open job sheet:",
+    jobSheetLink,
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
     "If you have any questions, please reply to this email.",

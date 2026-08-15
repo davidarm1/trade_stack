@@ -362,7 +362,7 @@ export async function GET(
   const tableX = margin;
   const tableW = width - margin * 2;
   const headerH = 22;
-  const rowH = 22;
+  const rowH = 24;
   const bottomReserve = 170;
   const itemLeft = tableX + 8;
   const itemMaxW = 260;
@@ -406,7 +406,7 @@ export async function GET(
       color: rgb(1, 1, 1),
       page,
     });
-    y -= headerH;
+    y -= headerH + 4;
   }
 
   function addContinuationPage() {
