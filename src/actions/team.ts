@@ -47,7 +47,7 @@ export async function getAssignableEngineers() {
     await Promise.all([
       supabase
         .from("users")
-        .select("id, role, is_active, name, email")
+        .select("id, role, is_active, name, email, tenant_id")
         .eq("tenant_id", ctx.tenantId),
       supabase
         .from("memberships")
@@ -60,12 +60,53 @@ export async function getAssignableEngineers() {
   if (membershipsError) return { data: null, error: membershipsError.message };
 
   const allowedRoles = new Set(["engineer", "owner", "office"]);
+  const activeUsers = (users ?? []).filter(
+    (u) => u.is_active !== false && allowedRoles.has(String(u.role ?? "")),
+  );
   const membershipByUserId = new Map(
     (memberships ?? []).map((m) => [m.user_id, m] as const),
   );
 
-  const engineers = (users ?? [])
-    .filter((u) => u.is_active !== false && allowedRoles.has(String(u.role ?? "")))
+  const missingMembershipUsers = activeUsers.filter((u) => !membershipByUserId.has(u.id));
+  if (missingMembershipUsers.length > 0) {
+    try {
+      const admin = createServiceRoleClient();
+      const now = new Date().toISOString();
+      const rows = missingMembershipUsers.map((u) => ({
+        user_id: u.id,
+        company_id: ctx.tenantId,
+        role: String(u.role ?? "viewer"),
+        status: "active",
+        display_name: u.name ?? null,
+        job_title: null,
+        employee_ref: null,
+        work_phone: null,
+        concurrent_allowed: false,
+        created_at: now,
+        updated_at: now,
+      }));
+
+      const { data: created, error: createError } = await admin
+        .from("memberships")
+        .upsert(rows, { onConflict: "user_id,company_id" })
+        .select("id, user_id, display_name, status, company_id");
+      if (createError) return { data: null, error: createError.message };
+
+      for (const membership of created ?? []) {
+        membershipByUserId.set(membership.user_id, membership);
+      }
+    } catch (error) {
+      return {
+        data: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not prepare engineer assignments.",
+      };
+    }
+  }
+
+  const engineers = activeUsers
     .map((u) => {
       const membership = membershipByUserId.get(u.id);
       if (!membership) return null;
