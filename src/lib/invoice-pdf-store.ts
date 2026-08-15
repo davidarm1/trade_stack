@@ -26,6 +26,24 @@ function drawRight(args: {
   page.drawText(text, { x: rightX - w, y, size, font, color });
 }
 
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = word;
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [String(text || "")];
+}
+
 export async function buildStoredInvoicePdf(args: {
   supabase: SupabaseClient;
   tenantId: string;
@@ -212,22 +230,25 @@ export async function buildStoredInvoicePdf(args: {
     sy -= 14;
   }
 
-  y = 572;
-  page.drawRectangle({ x: margin, y: y - 24, width: right - margin, height: 24, color: NAVY });
+  const tableY = 572;
+  const headerH = 30;
+  const rowMinH = 28;
+  const itemMaxW = 300;
+  page.drawRectangle({ x: margin, y: tableY - headerH, width: right - margin, height: headerH, color: NAVY });
   page.drawText("Item", {
     x: margin + 10,
-    y: y - 16,
+    y: tableY - 18,
     size: 10,
     font: bold,
     color: rgb(1, 1, 1),
   });
-  drawRight({ page, font: bold, text: "Qty", rightX: 394, y: y - 16, size: 10, color: rgb(1, 1, 1) });
+  drawRight({ page, font: bold, text: "Qty", rightX: 394, y: tableY - 18, size: 10, color: rgb(1, 1, 1) });
   drawRight({
     page,
     font: bold,
     text: "Unit Price",
     rightX: 470,
-    y: y - 16,
+    y: tableY - 18,
     size: 10,
     color: rgb(1, 1, 1),
   });
@@ -236,11 +257,11 @@ export async function buildStoredInvoicePdf(args: {
     font: bold,
     text: "Line Total",
     rightX: right - 10,
-    y: y - 16,
+    y: tableY - 18,
     size: 10,
     color: rgb(1, 1, 1),
   });
-  y -= 30;
+  let rowY = tableY - headerH - 12;
 
   const rows =
     (materials ?? []).length > 0
@@ -254,20 +275,36 @@ export async function buildStoredInvoicePdf(args: {
           },
         ];
   for (const r of rows.slice(0, 16)) {
-    page.drawText(String(r.description || "Item"), {
-      x: margin + 10,
-      y,
-      size: 10,
-      font,
-      color: TEXT,
-      maxWidth: 300,
+    const itemLines = wrapText(String(r.description || "Item"), font, 10, itemMaxW);
+    const lineHeight = 11;
+    const rowH = Math.max(rowMinH, itemLines.length * lineHeight + 10);
+
+    page.drawRectangle({
+      x: margin,
+      y: rowY - rowH,
+      width: right - margin,
+      height: rowH,
+      color: rgb(1, 1, 1),
+      borderColor: rgb(0.86, 0.88, 0.9),
+      borderWidth: 0.8,
+    });
+    const textTop = rowY - 14;
+    itemLines.forEach((line, idx) => {
+      page.drawText(line, {
+        x: margin + 10,
+        y: textTop - idx * lineHeight,
+        size: 10,
+        font,
+        color: TEXT,
+        maxWidth: itemMaxW,
+      });
     });
     drawRight({
       page,
       font,
       text: String(r.quantity ?? 0),
       rightX: 394,
-      y,
+      y: textTop,
       size: 10,
       color: TEXT,
     });
@@ -276,7 +313,7 @@ export async function buildStoredInvoicePdf(args: {
       font,
       text: money(Number(r.unit_price ?? 0), currency),
       rightX: 470,
-      y,
+      y: textTop,
       size: 10,
       color: TEXT,
     });
@@ -285,11 +322,11 @@ export async function buildStoredInvoicePdf(args: {
       font,
       text: money(Number(r.total_price ?? 0), currency),
       rightX: right - 10,
-      y,
+      y: textTop,
       size: 10,
       color: TEXT,
     });
-    y -= 18;
+    rowY -= rowH;
   }
 
   const subtotal = Number(job.subtotal ?? 0);
