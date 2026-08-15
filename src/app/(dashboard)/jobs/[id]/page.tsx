@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob, getJobInvoiceVersions } from "@/actions/jobs";
-import { getTeamMembers } from "@/actions/team";
+import { getAssignableEngineers } from "@/actions/team";
 import { formatCurrency } from "@/lib/format-currency";
 import { getTenantCurrencyCode } from "@/lib/tenant-currency";
 import {
@@ -71,9 +71,9 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [{ data, error }, teamRes, invoiceVersionsRes] = await Promise.all([
+  const [{ data, error }, engineerRes, invoiceVersionsRes] = await Promise.all([
     getJob(id),
-    getTeamMembers(),
+    getAssignableEngineers(),
     getJobInvoiceVersions(id),
   ]);
   const invoiceVersions = invoiceVersionsRes.data ?? [];
@@ -144,18 +144,9 @@ export default async function Page({
     return fromClient;
   })();
   const engineers =
-    teamRes.error || !teamRes.data
+    engineerRes.error || !engineerRes.data
       ? []
-      : teamRes.data
-          .filter(
-            (u: { role?: string; is_active?: boolean }) =>
-              u.is_active !== false &&
-              (u.role === "engineer" || u.role === "owner" || u.role === "office"),
-          )
-          .map((u: { id: string; name: string | null; email?: string | null }) => ({
-            id: u.id,
-            name: u.name ?? u.email ?? u.id,
-          }));
+      : engineerRes.data;
   const billingAddress =
     [j.clients?.address1, j.clients?.address2, j.clients?.town, j.clients?.postcode]
       .filter(Boolean)

@@ -1,25 +1,19 @@
 import Link from "next/link";
-import { getTeamMembers } from "@/actions/team";
+import { getAssignableEngineers } from "@/actions/team";
 import { NewJobEntry } from "./new-job-entry";
 
 export default async function NewJobPage() {
-  const teamRes = await getTeamMembers();
+  const engineerRes = await getAssignableEngineers();
 
-  if (teamRes.error) {
+  if (engineerRes.error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-        {teamRes.error}
+        {engineerRes.error}
       </div>
     );
   }
 
-  const engineers = (teamRes.data ?? []).filter(
-    (u: { role?: string; is_active?: boolean }) =>
-      u.is_active !== false &&
-      (u.role === "engineer" ||
-        u.role === "owner" ||
-        u.role === "office"),
-  );
+  const engineers = engineerRes.data ?? [];
 
   return (
     <div>

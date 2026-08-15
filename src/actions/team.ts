@@ -36,6 +36,42 @@ type TeamActor = {
   role: UserRole;
 };
 
+export type EngineerOption = { id: string; name: string | null };
+
+export async function getAssignableEngineers() {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("memberships")
+    .select("id, display_name, status, company_id, user_id, users!inner(role, is_active, name, email)")
+    .eq("company_id", ctx.tenantId)
+    .eq("status", "active")
+    .order("display_name", { ascending: true });
+
+  if (error) return { data: null, error: error.message };
+
+  const engineers = (data ?? [])
+    .filter((m) => {
+      const user = Array.isArray((m as { users?: unknown }).users)
+        ? ((m as { users?: Array<{ role?: string; is_active?: boolean }> }).users?.[0] ?? null)
+        : ((m as { users?: { role?: string; is_active?: boolean } | null }).users ?? null);
+      return user && user.is_active !== false && (user.role === "engineer" || user.role === "owner" || user.role === "office");
+    })
+    .map((m) => {
+      const user = Array.isArray((m as { users?: unknown }).users)
+        ? ((m as { users?: Array<{ role?: string; is_active?: boolean; name?: string | null; email?: string | null }> }).users?.[0] ?? null)
+        : ((m as { users?: { role?: string; is_active?: boolean; name?: string | null; email?: string | null } | null }).users ?? null);
+      return {
+        id: m.id,
+        name: m.display_name ?? user?.name ?? user?.email ?? m.id,
+      };
+    });
+
+  return { data: engineers, error: null };
+}
+
 export async function getTeamMembers() {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };

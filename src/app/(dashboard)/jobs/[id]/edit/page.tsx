@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob } from "@/actions/jobs";
-import { getTeamMembers } from "@/actions/team";
+import { getAssignableEngineers } from "@/actions/team";
 import { EditJobForm } from "./edit-job-form";
 
 export default async function EditJobPage({
@@ -10,27 +10,18 @@ export default async function EditJobPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [jobRes, teamRes] = await Promise.all([getJob(id), getTeamMembers()]);
+  const [jobRes, engineerRes] = await Promise.all([getJob(id), getAssignableEngineers()]);
 
   if (jobRes.error || !jobRes.data) notFound();
-  if (teamRes.error) {
+  if (engineerRes.error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-        {teamRes.error}
+        {engineerRes.error}
       </div>
     );
   }
 
-  const engineers = (teamRes.data ?? [])
-    .filter(
-      (u: { role?: string; is_active?: boolean }) =>
-        u.is_active !== false &&
-        (u.role === "engineer" || u.role === "owner" || u.role === "office"),
-    )
-    .map((u: { id: string; name: string | null }) => ({
-      id: u.id,
-      name: u.name,
-    }));
+  const engineers = engineerRes.data ?? [];
 
   const job = jobRes.data.job as {
     id: string;
