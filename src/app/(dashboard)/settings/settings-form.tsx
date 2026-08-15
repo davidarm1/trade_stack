@@ -56,6 +56,9 @@ export function SettingsForm({
     () => resolveBrandingFromSettings(keyValues).showLogo,
   );
   const [brandingBusy, setBrandingBusy] = useState(false);
+  const [vatRegistered, setVatRegistered] = useState(
+    () => Boolean(String(tenant?.vat_number ?? "").trim()) || Number(tenant?.default_vat_rate ?? 0) > 0,
+  );
 
   useEffect(() => {
     const r = resolveBrandingFromSettings(keyValues);
@@ -66,6 +69,12 @@ export function SettingsForm({
     keyValues[BRANDING_SHOW_COMPANY_NAME_KEY],
     keyValues[BRANDING_USE_LOGO_LEGACY_KEY],
   ]);
+
+  useEffect(() => {
+    setVatRegistered(
+      Boolean(String(tenant?.vat_number ?? "").trim()) || Number(tenant?.default_vat_rate ?? 0) > 0,
+    );
+  }, [tenant?.vat_number, tenant?.default_vat_rate]);
 
   const savedCurrency = (() => {
     const c = (tenant?.currency ?? "GBP").trim().toUpperCase();
@@ -165,10 +174,12 @@ export function SettingsForm({
       postcode: String(form.get("postcode") ?? "") || null,
       phone: String(form.get("phone") ?? "") || null,
       email: String(form.get("email") ?? "") || null,
+      vat_number: vatRegistered ? String(form.get("vat_number") ?? "").trim() || null : null,
+      default_vat_rate:
+        vatRegistered && form.get("default_vat_rate")
+          ? Number(form.get("default_vat_rate"))
+          : null,
       currency,
-      default_vat_rate: form.get("default_vat_rate")
-        ? Number(form.get("default_vat_rate"))
-        : null,
       default_payment_terms_days: form.get("default_payment_terms_days")
         ? Number(form.get("default_payment_terms_days"))
         : null,
@@ -290,16 +301,45 @@ export function SettingsForm({
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Default VAT rate (%)</label>
-            <input
-              name="default_vat_rate"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={tenant?.default_vat_rate ?? ""}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <label className="flex items-start gap-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={vatRegistered}
+                onChange={(e) => setVatRegistered(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300"
+              />
+              <span>
+                <span className="block font-medium text-slate-900">VAT registered</span>
+                <span className="block text-xs text-slate-500">
+                  Turn this off if the company is not VAT registered. VAT fields and VAT lines on invoices will be hidden.
+                </span>
+              </span>
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-slate-700">VAT number</label>
+                <input
+                  name="vat_number"
+                  defaultValue={tenant?.vat_number ?? ""}
+                  disabled={!vatRegistered}
+                  placeholder={vatRegistered ? "GB123456789" : "Not VAT registered"}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Default VAT rate (%)</label>
+                <input
+                  name="default_vat_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={tenant?.default_vat_rate ?? ""}
+                  disabled={!vatRegistered}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                />
+              </div>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Default payment terms (days)</label>

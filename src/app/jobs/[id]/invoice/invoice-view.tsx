@@ -49,6 +49,7 @@ export function InvoiceView({
     vatAmount: number;
     total: number;
     vatRate: number;
+    showVatLine: boolean;
     lineItems: Array<{
       id: string;
       item: string;
@@ -236,10 +237,12 @@ export function InvoiceView({
             <span>Subtotal</span>
             <span>{money(invoice.subtotal)}</span>
           </div>
-          <div className="flex items-center justify-between text-sm text-slate-700">
-            <span>VAT ({invoice.vatRate}%)</span>
-            <span>{money(invoice.vatAmount)}</span>
-          </div>
+          {invoice.showVatLine ? (
+            <div className="flex items-center justify-between text-sm text-slate-700">
+              <span>VAT ({invoice.vatRate}%)</span>
+              <span>{money(invoice.vatAmount)}</span>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between border-t border-slate-300 pt-2 text-base font-bold text-slate-900">
             <span>Total</span>
             <span>{money(invoice.total)}</span>

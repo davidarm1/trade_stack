@@ -47,6 +47,7 @@ export default async function JobInvoiceStandalonePage({
   const { showLogo, showName } = resolveBrandingFromSettings(settings);
   const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
   const footerTemplate = String(settings.invoice_footer_text || tenant?.invoice_footer_text || "").trim();
+  const vatRegistered = Boolean(String(tenant?.vat_number ?? "").trim());
   const footerValues = {
     company_name: String(settings.company_name || tenant?.name || "").trim(),
     address: compactTemplateBlock([
@@ -64,7 +65,7 @@ export default async function JobInvoiceStandalonePage({
     email: String(settings.email || settings.company_email || tenant?.email || "").trim(),
     phone: String(settings.phone || settings.company_phone || tenant?.phone || "").trim(),
     company_no: String(tenant?.company_reg_number || "").trim(),
-    vat_no: String(tenant?.vat_number || "").trim(),
+    vat_no: vatRegistered ? String(tenant?.vat_number || "").trim() : "",
     bank_name: String(settings.bank_name || tenant?.bank_name || "").trim(),
     bank_account_name: String(settings.bank_account_name || tenant?.bank_account_name || "").trim(),
     bank_account_number: String(settings.bank_account_number || tenant?.bank_account_number || "").trim(),
@@ -132,6 +133,7 @@ export default async function JobInvoiceStandalonePage({
         bankSwift: String(settings.bank_swift || tenant?.bank_swift || "").trim(),
         invoiceFooterText,
         showPaymentDetails: !footerUsesBankDetails,
+        showVatLine: vatRegistered,
         invoiceNumber: String(job.custom_invoice_number || `INV-${id.slice(0, 8)}`).trim(),
         invoiceDate: new Date().toLocaleDateString("en-GB"),
         dueDate: new Date(
@@ -149,9 +151,15 @@ export default async function JobInvoiceStandalonePage({
         sitePostcode: String(job.site_postcode || client?.site_postcode || client?.postcode || "").trim(),
         currency: String(tenant?.currency || "GBP").toUpperCase(),
         subtotal: Number(job.subtotal ?? 0),
-        vatAmount: Number(job.vat_amount ?? 0),
-        total: Number(job.total_inc_vat ?? 0),
-        vatRate: Number(job.vat_rate ?? settings.default_vat_rate ?? tenant?.default_vat_rate ?? 0),
+        vatAmount: vatRegistered
+          ? Number(job.vat_amount ?? 0)
+          : 0,
+        total: vatRegistered
+          ? Number(job.total_inc_vat ?? Number(job.subtotal ?? 0) + Number(job.vat_amount ?? 0))
+          : Number(job.subtotal ?? 0),
+        vatRate: vatRegistered
+          ? Number(job.vat_rate ?? settings.default_vat_rate ?? tenant?.default_vat_rate ?? 0)
+          : 0,
         lineItems: (materials ?? []).map((m) => ({
           id: m.id,
           item: String(m.description || "").trim(),

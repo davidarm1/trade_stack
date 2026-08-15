@@ -149,6 +149,7 @@ export async function GET(
     .map((p) => String(p ?? "").trim())
     .filter(Boolean);
   const footerTemplate = String(tenant?.invoice_footer_text ?? "").trim();
+  const vatRegistered = Boolean(String(tenant?.vat_number ?? "").trim());
   const footerValues = {
     company_name: companyName ?? "",
     address: compactTemplateBlock(companyAddressLines),
@@ -195,11 +196,11 @@ export async function GET(
     formatJobRefFormal(job.job_number as number | null | undefined) ||
     `JOB-${String(job.id).slice(0, 8)}`;
   const invoiceNumber = text(job.custom_invoice_number ?? `${jobRef}-INV`);
-  const vatRate = toNumber(job.vat_rate ?? settings.default_vat_rate, 0);
+  const vatRate = vatRegistered ? toNumber(job.vat_rate ?? settings.default_vat_rate, 0) : 0;
 
   const subtotal = toNumber(job.subtotal, 0);
   const vatAmount = toNumber(job.vat_amount, 0);
-  const total = toNumber(job.total_inc_vat, subtotal + vatAmount);
+  const total = vatRegistered ? toNumber(job.total_inc_vat, subtotal + vatAmount) : subtotal;
 
   const pdf = await PDFDocument.create();
   let page = pdf.addPage([595.28, 841.89]); // A4
@@ -488,10 +489,10 @@ export async function GET(
   // TOTALS SECTION
   const totalsValueRight = width - margin;
   const totalsLabelRight = totalsValueRight - 120;
-  const vatLabel = `VAT (${vatRate.toFixed(2).replace(/\.00$/, "")}%)`;
+  const vatLabel = vatRegistered ? `VAT (${vatRate.toFixed(2).replace(/\.00$/, "")}%)` : null;
   for (const [label, value, isTotal] of [
     ["Subtotal", asMoney(subtotal, currencyCode), false],
-    [vatLabel, asMoney(vatAmount, currencyCode), false],
+    ...(vatLabel ? ([[vatLabel, asMoney(vatAmount, currencyCode), false] as const]) : []),
     ["Total", asMoney(total, currencyCode), true],
   ] as const) {
     const size = isTotal ? 13 : 10;
