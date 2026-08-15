@@ -15,9 +15,17 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+function getInvoiceFromAddress(): string {
+  const invoiceFrom = process.env.RESEND_FROM_EMAIL?.trim();
+  if (invoiceFrom) return invoiceFrom;
+  const fallbackFrom = process.env.RESEND_FROM_NOREPLY?.trim();
+  if (fallbackFrom) return fallbackFrom;
+  throw new Error("RESEND_FROM_EMAIL is not set on the server.");
+}
+
 export async function sendInvoiceEmail(args: InvoiceEmailArgs): Promise<void> {
   const apiKey = getRequiredEnv("RESEND_API_KEY");
-  const from = getRequiredEnv("RESEND_FROM_EMAIL");
+  const from = getInvoiceFromAddress();
   const replyTo = process.env.RESEND_REPLY_TO_EMAIL?.trim();
   const resend = new Resend(apiKey);
 
