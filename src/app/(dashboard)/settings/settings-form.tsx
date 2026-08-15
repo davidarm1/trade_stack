@@ -340,6 +340,11 @@ export function SettingsForm({
                 />
               </div>
             </div>
+            {!vatRegistered ? (
+              <p className="text-xs text-slate-500">
+                VAT is disabled for this company. Turn VAT registered back on to charge VAT on new invoices.
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Default payment terms (days)</label>
