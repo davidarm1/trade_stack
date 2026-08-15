@@ -35,7 +35,7 @@ export function JobDetailActions({
   invoiceVersionCount: number;
   initialInvoiceRecipients: string;
   isPaid: boolean;
-  engineers: { id: string; name: string }[];
+  engineers: { id: string; name: string | null }[];
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);

@@ -43,31 +43,39 @@ export async function getAssignableEngineers() {
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("memberships")
-    .select("id, display_name, status, company_id, user_id, users!inner(role, is_active, name, email)")
-    .eq("company_id", ctx.tenantId)
-    .eq("status", "active")
-    .order("display_name", { ascending: true });
+  const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }] =
+    await Promise.all([
+      supabase
+        .from("users")
+        .select("id, role, is_active, name, email")
+        .eq("tenant_id", ctx.tenantId),
+      supabase
+        .from("memberships")
+        .select("id, user_id, display_name, status, company_id")
+        .eq("company_id", ctx.tenantId)
+        .eq("status", "active")
+        .order("display_name", { ascending: true }),
+    ]);
 
-  if (error) return { data: null, error: error.message };
+  if (usersError) return { data: null, error: usersError.message };
+  if (membershipsError) return { data: null, error: membershipsError.message };
 
-  const engineers = (data ?? [])
-    .filter((m) => {
-      const user = Array.isArray((m as { users?: unknown }).users)
-        ? ((m as { users?: Array<{ role?: string; is_active?: boolean }> }).users?.[0] ?? null)
-        : ((m as { users?: { role?: string; is_active?: boolean } | null }).users ?? null);
-      return user && user.is_active !== false && (user.role === "engineer" || user.role === "owner" || user.role === "office");
-    })
-    .map((m) => {
-      const user = Array.isArray((m as { users?: unknown }).users)
-        ? ((m as { users?: Array<{ role?: string; is_active?: boolean; name?: string | null; email?: string | null }> }).users?.[0] ?? null)
-        : ((m as { users?: { role?: string; is_active?: boolean; name?: string | null; email?: string | null } | null }).users ?? null);
+  const allowedRoles = new Set(["engineer", "owner", "office"]);
+  const membershipByUserId = new Map(
+    (memberships ?? []).map((m) => [m.user_id, m] as const),
+  );
+
+  const engineers = (users ?? [])
+    .filter((u) => u.is_active !== false && allowedRoles.has(String(u.role ?? "")))
+    .map((u) => {
+      const membership = membershipByUserId.get(u.id);
+      if (!membership) return null;
       return {
-        id: m.id,
-        name: m.display_name ?? user?.name ?? user?.email ?? m.id,
+        id: membership.id,
+        name: membership.display_name ?? u.name ?? u.email ?? membership.id,
       };
-    });
+    })
+    .filter((v): v is EngineerOption => v !== null);
 
   return { data: engineers, error: null };
 }
