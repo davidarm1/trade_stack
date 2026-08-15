@@ -466,7 +466,7 @@ export async function sendJobInvoice(
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
       <p>Hello,</p>
-      <p>Please find your invoice attached via secure link:</p>
+      <p>Please find your invoice PDF attached. A secure download link is also included below:</p>
       <p><a href="${downloadUrl}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
       ${reasonText}
       <p>If you have any questions, please reply to this email.</p>
@@ -475,7 +475,8 @@ export async function sendJobInvoice(
   const text = [
     "Hello,",
     "",
-    "Please find your invoice at the link below:",
+    "Please find your invoice PDF attached.",
+    "A secure download link is included below:",
     downloadUrl,
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
@@ -489,6 +490,13 @@ export async function sendJobInvoice(
       subject,
       html,
       text,
+      attachments: [
+        {
+          filename: fileName,
+          content: buffer,
+          contentType: "application/pdf",
+        },
+      ],
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Email send failed.";

@@ -101,6 +101,7 @@ export default async function JobSheetStandalonePage({
     b2DownloadPathFromStoredValue(
       (completion as { client_signature_url?: string | null } | null)?.client_signature_url ?? null,
     );
+  const storedJobSheetUrl = b2DownloadPathFromStoredValue(job.jobsheet_url);
 
   const dateOnSite = job.date_onsite
     ? new Date(String(job.date_onsite)).toLocaleDateString("en-GB", {
@@ -111,53 +112,67 @@ export default async function JobSheetStandalonePage({
     : null;
 
   return (
-    <JobSheetView
-      embed={isEmbed}
-      jobRef={jobRef}
-      companyName={companyName}
-      companyDetailLines={companyDetailLines}
-      companyLogoUrl={companyLogoUrl}
-      brandingShowLogo={Boolean(showLogo && companyLogoUrl)}
-      brandingShowCompanyName={showName}
-      clientName={
-        opt(client?.company_name ?? client?.contact_name) ?? "—"
-      }
-      siteLines={siteLines}
-      contactName={
-        client?.contact_name && client.contact_name !== (client?.company_name ?? "")
-          ? String(client.contact_name)
-          : null
-      }
-      contactNumber={opt(client?.contact_number)}
-      dateOnSite={dateOnSite}
-      timeOnSite={opt(job.time_onsite)}
-      engineerName={opt((engineer as { display_name?: string | null } | null)?.display_name ?? null)}
-      status={opt(job.status)}
-      poNumber={opt(job.client_order_number ?? job.custom_po_number)}
-      jobDescription={opt(job.description)}
-      workCarriedOut={opt(completion?.work_carried_out)}
-      partsUsed={opt((completion as { parts_used?: string | null } | null)?.parts_used)}
-      recommendations={opt(
-        (completion as { recommendations?: string | null } | null)?.recommendations,
-      )}
-      materials={(materials ?? []).map((m) => ({
-        description: String(m.description ?? "").trim(),
-        quantity: m.quantity != null ? Number(m.quantity) : null,
-        unitPrice: m.unit_price != null ? Number(m.unit_price) : null,
-        totalPrice: m.total_price != null ? Number(m.total_price) : null,
-      }))}
-      labourCharge={job.labour_charge != null ? Number(job.labour_charge) : null}
-      totalMaterials={job.total_materials != null ? Number(job.total_materials) : null}
-      printName={opt(
-        (completion as { client_print_name?: string | null } | null)?.client_print_name,
-      )}
-      signatureUrl={signatureUrl}
-      signedAt={
-        opt(job.signed_at) ??
-        opt((completion as { submitted_at?: string | null } | null)?.submitted_at)
-      }
-      startTime={opt((completion as { start_time?: string | null } | null)?.start_time)}
-      finishTime={opt((completion as { finish_time?: string | null } | null)?.finish_time)}
-    />
+    <>
+      {isEmbed ? null : storedJobSheetUrl ? (
+        <div className="mb-4 rounded-md border border-slate-200 bg-white p-3 shadow-sm print:hidden">
+          <a
+            href={storedJobSheetUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Open stored job sheet PDF
+          </a>
+        </div>
+      ) : null}
+      <JobSheetView
+        embed={isEmbed}
+        jobRef={jobRef}
+        companyName={companyName}
+        companyDetailLines={companyDetailLines}
+        companyLogoUrl={companyLogoUrl}
+        brandingShowLogo={Boolean(showLogo && companyLogoUrl)}
+        brandingShowCompanyName={showName}
+        clientName={
+          opt(client?.company_name ?? client?.contact_name) ?? "—"
+        }
+        siteLines={siteLines}
+        contactName={
+          client?.contact_name && client.contact_name !== (client?.company_name ?? "")
+            ? String(client.contact_name)
+            : null
+        }
+        contactNumber={opt(client?.contact_number)}
+        dateOnSite={dateOnSite}
+        timeOnSite={opt(job.time_onsite)}
+        engineerName={opt((engineer as { display_name?: string | null } | null)?.display_name ?? null)}
+        status={opt(job.status)}
+        poNumber={opt(job.client_order_number ?? job.custom_po_number)}
+        jobDescription={opt(job.description)}
+        workCarriedOut={opt(completion?.work_carried_out)}
+        partsUsed={opt((completion as { parts_used?: string | null } | null)?.parts_used)}
+        recommendations={opt(
+          (completion as { recommendations?: string | null } | null)?.recommendations,
+        )}
+        materials={(materials ?? []).map((m) => ({
+          description: String(m.description ?? "").trim(),
+          quantity: m.quantity != null ? Number(m.quantity) : null,
+          unitPrice: m.unit_price != null ? Number(m.unit_price) : null,
+          totalPrice: m.total_price != null ? Number(m.total_price) : null,
+        }))}
+        labourCharge={job.labour_charge != null ? Number(job.labour_charge) : null}
+        totalMaterials={job.total_materials != null ? Number(job.total_materials) : null}
+        printName={opt(
+          (completion as { client_print_name?: string | null } | null)?.client_print_name,
+        )}
+        signatureUrl={signatureUrl}
+        signedAt={
+          opt(job.signed_at) ??
+          opt((completion as { submitted_at?: string | null } | null)?.submitted_at)
+        }
+        startTime={opt((completion as { start_time?: string | null } | null)?.start_time)}
+        finishTime={opt((completion as { finish_time?: string | null } | null)?.finish_time)}
+      />
+    </>
   );
 }

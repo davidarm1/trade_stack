@@ -5,6 +5,11 @@ type InvoiceEmailArgs = {
   subject: string;
   html: string;
   text: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType: string;
+  }>;
 };
 
 function getRequiredEnv(name: string): string {
@@ -36,6 +41,7 @@ export async function sendInvoiceEmail(args: InvoiceEmailArgs): Promise<void> {
     html: args.html,
     text: args.text,
     replyTo: replyTo ? [replyTo] : undefined,
+    attachments: args.attachments,
   });
   if (error) {
     throw new Error(error.message || "Failed to send email via Resend.");
