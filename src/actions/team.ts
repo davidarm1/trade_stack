@@ -59,10 +59,7 @@ export async function getAssignableEngineers() {
   if (usersError) return { data: null, error: usersError.message };
   if (membershipsError) return { data: null, error: membershipsError.message };
 
-  const allowedRoles = new Set(["engineer", "owner", "office"]);
-  const activeUsers = (users ?? []).filter(
-    (u) => u.is_active !== false && allowedRoles.has(String(u.role ?? "")),
-  );
+  const activeUsers = (users ?? []).filter((u) => u.is_active !== false);
   const membershipByUserId = new Map(
     (memberships ?? []).map((m) => [m.user_id, m] as const),
   );
