@@ -466,14 +466,16 @@ export async function sendJobInvoice(
   const reasonText = trimmedReason ? `<p><strong>Reason for this version:</strong> ${trimmedReason}</p>` : "";
   const appUrl = appOrigin();
   const invoiceLink = new URL(downloadUrl, appUrl).toString();
+  const jobSheetPageLink = `${appUrl}/jobs/${jobId}/job-sheet`;
   const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
-  const jobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
+  const storedJobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
       <p>Hello,</p>
       <p>Please find your invoice PDF attached. A secure download link is also included below:</p>
       <p><a href="${invoiceLink}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
-      ${jobSheetLink ? `<p><a href="${jobSheetLink}" target="_blank" rel="noopener noreferrer">Open job sheet PDF</a></p>` : ""}
+      <p><a href="${jobSheetPageLink}" target="_blank" rel="noopener noreferrer">Open job sheet</a></p>
+      ${storedJobSheetLink ? `<p><a href="${storedJobSheetLink}" target="_blank" rel="noopener noreferrer">Open job sheet PDF</a></p>` : ""}
       ${reasonText}
       <p>If you have any questions, please reply to this email.</p>
     </div>
@@ -484,7 +486,10 @@ export async function sendJobInvoice(
     "Please find your invoice PDF attached.",
     "A secure download link is included below:",
     invoiceLink,
-    ...(jobSheetLink ? ["", "Open job sheet PDF:", jobSheetLink] : []),
+    "",
+    "Open job sheet:",
+    jobSheetPageLink,
+    ...(storedJobSheetLink ? ["", "Open job sheet PDF:", storedJobSheetLink] : []),
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
     "If you have any questions, please reply to this email.",
