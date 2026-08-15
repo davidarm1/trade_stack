@@ -178,7 +178,7 @@ export function SettingsForm({
       default_vat_rate:
         vatRegistered && form.get("default_vat_rate")
           ? Number(form.get("default_vat_rate"))
-          : null,
+          : 0,
       currency,
       default_payment_terms_days: form.get("default_payment_terms_days")
         ? Number(form.get("default_payment_terms_days"))
