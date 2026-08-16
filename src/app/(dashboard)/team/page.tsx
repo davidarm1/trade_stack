@@ -80,7 +80,7 @@ export default async function TeamPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Team</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Manage active and inactive users in your tenant.
+            Manage active and inactive team members.
           </p>
         </div>
         <AddTeamMemberDialog />

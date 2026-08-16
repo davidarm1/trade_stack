@@ -64,7 +64,7 @@ export default async function RegisterPage({
           {step === 3 &&
             "Test checkout: use card number 63430 to simulate a successful payment."}
           {step === 4 &&
-            "Owners register their company here. Office staff and engineers are added inside the app by a company owner."}
+            "Only owners register a new company here. Office staff and engineers are added inside the app after setup."}
         </p>
 
         {step === 1 && (
@@ -198,7 +198,7 @@ export default async function RegisterPage({
           <form action={signUpFromRegisterForm} className="mt-8 space-y-4">
             <input type="hidden" name="packageId" value={packageId} />
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-              If this email already exists, we’ll email a setup link or password reset so you can continue as the owner of your new company.
+              If this email already exists, we’ll email a setup link or password reset so you can keep going with your new company.
             </div>
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
               {selectedPackage.name} (monthly) — payment simulated as approved.
@@ -291,7 +291,7 @@ export default async function RegisterPage({
           <Link href="/login" className="font-medium text-slate-900 underline">
             Sign in
           </Link>
-          {" "}first, then create your new company.
+          {" "}first, then start your new company.
         </p>
       </div>
     </div>

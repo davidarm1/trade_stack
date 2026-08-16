@@ -30,8 +30,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Reset password</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Enter the email you use for Trade Stack. If an account exists, we will
-          email a reset link.
+          Enter the email you use for Trade Stack. If an account exists, we’ll email a reset link.
         </p>
 
         {sent ? (

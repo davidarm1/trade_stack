@@ -58,7 +58,7 @@ async function sendAuthEmail(args: {
   }
 }
 
-async function renderEmail(element: React.ReactElement) {
+export async function renderEmail(element: React.ReactElement) {
   const { renderToStaticMarkup } = await import("react-dom/server");
   return renderToStaticMarkup(element);
 }
@@ -69,7 +69,7 @@ export async function sendInviteEmail(args: {
   role: string;
   inviteUrl: string;
 }) {
-  const subject = `You’re invited to join ${args.tenantName} on Trade Stack Cloud`;
+  const subject = `Trade Stack Cloud — You’re invited to join ${args.tenantName}`;
   const html = await renderEmail(
     createElement(InviteEmail, {
       tenantName: args.tenantName,
@@ -78,10 +78,8 @@ export async function sendInviteEmail(args: {
     }),
   );
   const text = [
-    `Trade Stack Cloud`,
-    "",
     `You’ve been invited to join ${args.tenantName} on Trade Stack Cloud.`,
-    `Your role: ${args.role}`,
+    `Role: ${args.role}`,
     "",
     `Accept invite & set your password: ${args.inviteUrl}`,
     "",
@@ -95,18 +93,16 @@ export async function sendPasswordResetEmail(args: {
   to: string;
   resetUrl: string;
 }) {
-  const subject = "Reset your Trade Stack Cloud password";
+  const subject = "Trade Stack Cloud — Reset your password";
   const html = await renderEmail(
     createElement(PasswordResetEmail, { resetUrl: args.resetUrl }),
   );
   const text = [
-    `Trade Stack Cloud`,
-    "",
     "You requested a password reset for your Trade Stack Cloud account.",
     "",
     `Reset my password: ${args.resetUrl}`,
     "",
-    "This link expires in 1 hour.",
+    "This link expires in 1 hour for your security.",
     "If you didn’t request this, you can safely ignore this email.",
   ].join("\n");
 
@@ -117,18 +113,16 @@ export async function sendCompanySetupLinkEmail(args: {
   to: string;
   setupUrl: string;
 }) {
-  const subject = "Continue setting up your Trade Stack Cloud company";
+  const subject = "Trade Stack Cloud — Continue company setup";
   const html = await renderEmail(
     createElement(CompanySetupLinkEmail, { setupUrl: args.setupUrl }),
   );
   const text = [
-    `Trade Stack Cloud`,
-    "",
     "We couldn’t finish creating your account with the password you entered.",
     "",
     `Continue setup: ${args.setupUrl}`,
     "",
-    "This link expires in 1 hour.",
+    "This link expires in 1 hour for your security.",
     "If you didn’t request this, you can safely ignore this email.",
   ].join("\n");
 

@@ -35,7 +35,7 @@ export default async function TimesheetsPage({
     <div>
       <h1 className="text-2xl font-semibold text-slate-900">Timesheets</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Shift entries for your team — filtered by user and date range.
+        View shift entries for your team, filtered by person and date range.
       </p>
 
       <Suspense

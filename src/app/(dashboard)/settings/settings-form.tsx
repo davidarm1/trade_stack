@@ -312,7 +312,7 @@ export function SettingsForm({
               <span>
                 <span className="block font-medium text-slate-900">VAT registered</span>
                 <span className="block text-xs text-slate-500">
-                  Turn this off only if the company is not VAT registered. When enabled, VAT number and default VAT rate stay available and VAT is shown on invoices.
+                  Turn this off only if the company is not VAT registered. When on, VAT number and default VAT rate stay available and VAT appears on invoices.
                 </span>
               </span>
             </label>
@@ -342,7 +342,7 @@ export function SettingsForm({
             </div>
             {!vatRegistered ? (
               <p className="text-xs text-slate-500">
-                VAT is disabled for this company. Turn VAT registered back on to charge VAT on new invoices.
+                VAT is off for this company. Turn VAT registered back on to charge VAT on new invoices.
               </p>
             ) : null}
           </div>
@@ -358,8 +358,8 @@ export function SettingsForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Invoice footer text</label>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Printed at the bottom of every invoice PDF. You can use placeholders like
+            <p className="mt-1 text-xs text-slate-500">
+              Printed at the bottom of every invoice PDF. Use placeholders like
               ##company_name##, ##address##, ##bank_details##, ##email##, ##phone##,
               ##company_no##, and ##vat_no##. Defaults to “Thank you for your business.” if left blank.
             </p>
@@ -436,7 +436,7 @@ export function SettingsForm({
         <div className="mb-4">
           <h2 className="text-sm font-semibold text-slate-900">Branding</h2>
           <p className="mt-1 text-xs text-slate-500">
-            Logo and company-name controls for the app sidebar and printed invoice headers.
+            Control whether the app sidebar and invoice headers show the company name and logo.
           </p>
         </div>
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
@@ -451,7 +451,7 @@ export function SettingsForm({
             <span>
               <span className="font-medium">Show company name</span>
               <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Sidebar, mobile header, and invoice top header only.
+                Used in the sidebar, mobile header, and invoice top header.
               </span>
             </span>
           </label>
@@ -466,7 +466,7 @@ export function SettingsForm({
             <span>
               <span className="font-medium">Show logo</span>
               <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Turn on both checkboxes to show logo and name together in those headers.
+                Turn on both checkboxes to show the logo and company name together.
               </span>
             </span>
           </label>

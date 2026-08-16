@@ -16,7 +16,7 @@ export default async function OnboardingPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Onboarding</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Staff acceptance forms — terms, handbook, and policies.
+            Staff acceptance forms: terms, handbook, and policies.
           </p>
         </div>
         {isManager && (
@@ -38,13 +38,13 @@ export default async function OnboardingPage() {
       <div className="mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">
-            Outstanding for you
+            Outstanding items
           </h2>
         </div>
         <div className="divide-y divide-slate-100">
           {(outstanding ?? []).length === 0 ? (
             <p className="px-4 py-6 text-sm text-slate-500">
-              You&apos;re all caught up — nothing outstanding.
+              You&apos;re all caught up. Nothing outstanding.
             </p>
           ) : (
             (outstanding ?? []).map((doc) => (

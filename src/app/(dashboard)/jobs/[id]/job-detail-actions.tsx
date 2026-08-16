@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { sendJobInvoice, updateJob } from "@/actions/jobs";
+import { sendJobInvoice, sendJobSheetEmail, updateJob } from "@/actions/jobs";
 import { WorkflowStepper } from "@/components/workflow-stepper";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
 
@@ -10,6 +10,7 @@ export function JobDetailActions({
   jobId,
   jobNumber,
   jobTitle,
+  currentJobSheetUrl,
   assignedEngineerMembershipId,
   sentToEngineerAt,
   receivedFromEngineerAt,
@@ -25,6 +26,7 @@ export function JobDetailActions({
   jobId: string;
   jobNumber: number | null;
   jobTitle: string;
+  currentJobSheetUrl: string | null;
   assignedEngineerMembershipId: string | null;
   sentToEngineerAt: string | null;
   receivedFromEngineerAt: string | null;
@@ -43,7 +45,7 @@ export function JobDetailActions({
   const [selectedEngineerId, setSelectedEngineerId] = useState(
     assignedEngineerMembershipId ?? "",
   );
-  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [emailModalType, setEmailModalType] = useState<"invoice" | "jobsheet" | null>(null);
   const [invoiceRecipients, setInvoiceRecipients] = useState(
     initialInvoiceRecipients,
   );
@@ -65,6 +67,7 @@ export function JobDetailActions({
   const approveEnabled = engineerCompletedDone && !approvedDone;
   const invoiceEnabled = approvedDone;
   const previewInvoiceEnabled = approvedDone;
+  const jobSheetEmailEnabled = Boolean(currentJobSheetUrl?.trim());
   const paidEnabled = invoiceDone && !paidDone;
 
   const doneBtn =
@@ -184,8 +187,32 @@ export function JobDetailActions({
       setMsg(error);
       return;
     }
-    setInvoiceModalOpen(false);
+    setEmailModalType(null);
     setMsg("Invoice emailed and marked as sent.");
+    router.refresh();
+  }
+
+  async function handleSendJobSheet() {
+    if (busyKey) return;
+    const recipients = invoiceRecipients.trim();
+    if (!recipients) {
+      setMsg("Enter at least one recipient email.");
+      return;
+    }
+    if (!currentJobSheetUrl?.trim()) {
+      setMsg("Create the job sheet PDF first.");
+      return;
+    }
+    setBusyKey("jobsheet");
+    setMsg(null);
+    const { error } = await sendJobSheetEmail(jobId, recipients);
+    setBusyKey(null);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    setEmailModalType(null);
+    setMsg("Job sheet emailed.");
     router.refresh();
   }
 
@@ -304,10 +331,25 @@ export function JobDetailActions({
           })}
           onClick={() => {
             if (busyKey) return;
-            setInvoiceModalOpen(true);
+            setEmailModalType("invoice");
           }}
         >
           {invoiceDone ? "Send New Invoice Version" : "Send Invoice"}
+        </button>
+        <button
+          type="button"
+          disabled={busyKey !== null || !jobSheetEmailEnabled}
+          className={jobSheetEmailEnabled ? readyBtn : blockedBtn}
+          title={jobInvoiceEmailSubject({
+            jobNumber,
+            title: `${jobTitle} Job Sheet`,
+          })}
+          onClick={() => {
+            if (busyKey) return;
+            setEmailModalType("jobsheet");
+          }}
+        >
+          Send Job Sheet
         </button>
         {paidDone ? (
           <button
@@ -358,18 +400,20 @@ export function JobDetailActions({
           {msg}
         </p>
       )}
-      {invoiceModalOpen ? (
+      {emailModalType ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           role="dialog"
           aria-modal="true"
-          onClick={() => setInvoiceModalOpen(false)}
+          onClick={() => setEmailModalType(null)}
         >
           <div
             className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-semibold text-slate-900">Send invoice email</h3>
+            <h3 className="text-base font-semibold text-slate-900">
+              {emailModalType === "invoice" ? "Send invoice email" : "Send job sheet email"}
+            </h3>
             <p className="mt-1 text-sm text-slate-600">
               Enter one or more recipient emails, comma delimited.
             </p>
@@ -383,7 +427,7 @@ export function JobDetailActions({
                 placeholder="customer@example.com, office@example.com"
               />
             </label>
-            {invoiceVersionCount >= 1 ? (
+            {emailModalType === "invoice" && invoiceVersionCount >= 1 ? (
               <label className="mt-3 block text-sm font-medium text-slate-700">
                 Reason for this new version
                 <input
@@ -397,18 +441,18 @@ export function JobDetailActions({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setInvoiceModalOpen(false)}
+                onClick={() => setEmailModalType(null)}
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => void handleSendInvoice()}
-                disabled={busyKey === "invoice"}
+                onClick={() => void (emailModalType === "invoice" ? handleSendInvoice() : handleSendJobSheet())}
+                disabled={busyKey === emailModalType}
                 className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
-                {busyKey === "invoice" ? "Sending..." : "Send"}
+                {busyKey === emailModalType ? "Sending..." : "Send"}
               </button>
             </div>
           </div>

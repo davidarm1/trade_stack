@@ -10,6 +10,7 @@ import { b2DownloadPathForKey, b2DownloadPathFromStoredValue } from "@/lib/b2-li
 import { appOrigin } from "@/lib/auth-links";
 import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
 import { sendInvoiceEmail } from "@/lib/resend";
+import { renderTradeCompanyEmail } from "@/emails/TradeCompanyEmail";
 import type { Job } from "@/types/database";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
 import { logAuditEvent } from "@/lib/audit";
@@ -398,6 +399,44 @@ export async function sendJobInvoice(
     .maybeSingle();
   if (jobMetaErr || !jobMeta) return { data: null, error: jobMetaErr?.message ?? "Job not found." };
 
+  const [{ data: tenant }, { data: settingRows }] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select("name, email, phone, logo_url, address1, address2, town, postcode")
+      .eq("id", ctx.tenantId)
+      .maybeSingle(),
+    supabase
+      .from("settings")
+      .select("field_key, field_value")
+      .eq("tenant_id", ctx.tenantId),
+  ]);
+  const settings = Object.fromEntries(
+    (settingRows ?? []).map((row) => [String(row.field_key), String(row.field_value ?? "")]),
+  );
+  const companyName =
+    String(settings.company_name ?? tenant?.name ?? "").trim() || "your company";
+  const companyPhone = String(
+    settings.company_phone ?? settings.phone ?? tenant?.phone ?? "",
+  ).trim();
+  const companyEmail = String(
+    settings.company_email ?? settings.email ?? tenant?.email ?? "",
+  ).trim();
+  const companyAddressLines = [
+    settings.address_line_1 ?? settings.address1 ?? tenant?.address1,
+    settings.address_line_2 ?? settings.address2 ?? tenant?.address2,
+    settings.town ?? tenant?.town,
+    settings.postcode ?? tenant?.postcode,
+  ]
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean);
+  const companyAddressText = companyAddressLines.join(", ");
+  const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
+  const companyContactParts = [
+    companyAddressText,
+    companyPhone ? `Tel: ${companyPhone}` : "",
+    companyEmail ? `Email: ${companyEmail}` : "",
+  ].filter(Boolean);
+
   const { data: versions, error: verErr } = await supabase
     .from("job_invoice_versions")
     .select("id, version_no")
@@ -459,33 +498,41 @@ export async function sendJobInvoice(
   });
   if (fileErr) return { data: null, error: fileErr.message };
 
-  const subject = jobInvoiceEmailSubject({
+  const subjectCore = jobInvoiceEmailSubject({
     jobNumber: jobMeta.job_number as number | null | undefined,
     title: String(jobMeta.title ?? "Invoice"),
   });
-  const reasonText = trimmedReason ? `<p><strong>Reason for this version:</strong> ${trimmedReason}</p>` : "";
+  const subject = `${companyName} — ${subjectCore}`;
   const appUrl = appOrigin();
   const invoiceLink = new URL(downloadUrl, appUrl).toString();
   const jobSheetPageLink = `${appUrl}/jobs/${jobId}/job-sheet`;
   const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
   const storedJobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
-      <p>Hello,</p>
-      <p>Please find your invoice PDF attached. A secure download link is also included below:</p>
-      <p><a href="${invoiceLink}" target="_blank" rel="noopener noreferrer">Open invoice PDF</a></p>
-      <p><a href="${jobSheetPageLink}" target="_blank" rel="noopener noreferrer">Open job sheet</a></p>
-      ${storedJobSheetLink ? `<p><a href="${storedJobSheetLink}" target="_blank" rel="noopener noreferrer">Open job sheet PDF</a></p>` : ""}
-      ${reasonText}
-      <p>If you have any questions, please reply to this email.</p>
-    </div>
-  `;
+  const html = await renderTradeCompanyEmail({
+    preview: `${companyName} invoice`,
+    eyebrow: "Invoice from your trade company",
+    heading: `${companyName} invoice`,
+    companyName,
+    companyLogoUrl,
+    companyContactLines: companyContactParts,
+    intro: `Hello, please find the invoice for ${companyName} attached. The secure links are below.`,
+    primaryAction: { label: "Open invoice PDF", href: invoiceLink },
+    secondaryActions: [
+      { label: "Open job sheet", href: jobSheetPageLink },
+      ...(storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : []),
+    ],
+    supportingText: trimmedReason ? `Reason for this version: ${trimmedReason}` : undefined,
+    footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
+  });
   const text = [
     "Hello,",
     "",
-    "Please find your invoice PDF attached.",
+    `Please find the invoice for ${companyName} attached.`,
     "A secure download link is included below:",
     invoiceLink,
+    "",
+    companyName,
+    ...companyContactParts,
     "",
     "Open job sheet:",
     jobSheetPageLink,
@@ -493,6 +540,7 @@ export async function sendJobInvoice(
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
     "If you have any questions, please reply to this email.",
+    `Sent via Trade Stack on behalf of ${companyName}.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -502,6 +550,8 @@ export async function sendJobInvoice(
       subject,
       html,
       text,
+      fromName: companyName,
+      replyTo: companyEmail || undefined,
       attachments: [
         {
           filename: fileName,
@@ -534,6 +584,141 @@ export async function sendJobInvoice(
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}/invoice`);
   return { data: { version_no: nextVersion, public_url: downloadUrl }, error: null };
+}
+
+export async function sendJobSheetEmail(
+  jobId: string,
+  recipientEmails: string,
+): Promise<{ data: { sent: true } | null; error: string | null }> {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+  const recipientsRaw = String(recipientEmails ?? "").trim();
+  if (!recipientsRaw) {
+    return { data: null, error: "At least one recipient email is required." };
+  }
+  const recipients = Array.from(
+    new Set(
+      recipientsRaw
+        .split(/[,\n;]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+  if (recipients.length === 0) {
+    return { data: null, error: "At least one recipient email is required." };
+  }
+  const bad = recipients.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(e));
+  if (bad) {
+    return { data: null, error: `Invalid email address: ${bad}` };
+  }
+
+  const { data: jobMeta, error: jobMetaErr } = await supabase
+    .from("jobs")
+    .select("id, title, job_number, jobsheet_url")
+    .eq("id", jobId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (jobMetaErr || !jobMeta) {
+    return { data: null, error: jobMetaErr?.message ?? "Job not found." };
+  }
+
+  const [{ data: tenant }, { data: settingRows }] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select("name, email, phone, logo_url, address1, address2, town, postcode")
+      .eq("id", ctx.tenantId)
+      .maybeSingle(),
+    supabase
+      .from("settings")
+      .select("field_key, field_value")
+      .eq("tenant_id", ctx.tenantId),
+  ]);
+  const settings = Object.fromEntries(
+    (settingRows ?? []).map((row) => [String(row.field_key), String(row.field_value ?? "")]),
+  );
+  const companyName =
+    String(settings.company_name ?? tenant?.name ?? "").trim() || "your company";
+  const companyPhone = String(
+    settings.company_phone ?? settings.phone ?? tenant?.phone ?? "",
+  ).trim();
+  const companyEmail = String(
+    settings.company_email ?? settings.email ?? tenant?.email ?? "",
+  ).trim();
+  const companyAddressLines = [
+    settings.address_line_1 ?? settings.address1 ?? tenant?.address1,
+    settings.address_line_2 ?? settings.address2 ?? tenant?.address2,
+    settings.town ?? tenant?.town,
+    settings.postcode ?? tenant?.postcode,
+  ]
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean);
+  const companyAddressText = companyAddressLines.join(", ");
+  const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
+  const companyContactParts = [
+    companyAddressText,
+    companyPhone ? `Tel: ${companyPhone}` : "",
+    companyEmail ? `Email: ${companyEmail}` : "",
+  ].filter(Boolean);
+
+  const subjectCore = jobInvoiceEmailSubject({
+    jobNumber: jobMeta.job_number as number | null | undefined,
+    title: String(jobMeta.title ?? "Job Sheet"),
+  });
+  const subject = `${companyName} — ${subjectCore} — Job Sheet`;
+  const appUrl = appOrigin();
+  const jobSheetPageLink = `${appUrl}/jobs/${jobId}/job-sheet`;
+  const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
+  const storedJobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
+  const html = await renderTradeCompanyEmail({
+    preview: `${companyName} job sheet`,
+    eyebrow: "Job sheet from your trade company",
+    heading: `${companyName} job sheet`,
+    companyName,
+    companyLogoUrl,
+    companyContactLines: companyContactParts,
+    intro: `Hello, please find the job sheet for ${companyName} below. A secure download link is also included.`,
+    primaryAction: { label: "Open job sheet", href: jobSheetPageLink },
+    secondaryActions: storedJobSheetLink
+      ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }]
+      : [],
+    footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
+  });
+  const text = [
+    "Hello,",
+    "",
+    `Please find the job sheet for ${companyName} below. A secure download link is also included.`,
+    "",
+    companyName,
+    ...companyContactParts,
+    "",
+    jobSheetPageLink,
+    ...(storedJobSheetLink ? ["", storedJobSheetLink] : []),
+    "",
+    "If you have any questions, please reply to this email.",
+    `Sent via Trade Stack on behalf of ${companyName}.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    await sendInvoiceEmail({
+      to: recipients,
+      subject,
+      html,
+      text,
+      fromName: companyName,
+      replyTo: companyEmail || undefined,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Email send failed.";
+    return {
+      data: null,
+      error: `Job sheet PDF reference prepared, but email sending failed: ${message}`,
+    };
+  }
+
+  return { data: { sent: true }, error: null };
 }
 
 export async function deleteJob(id: string) {

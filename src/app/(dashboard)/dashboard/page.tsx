@@ -393,7 +393,7 @@ export default async function DashboardPage({
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-600">
-            A business-first view of cash, work, quotes, and overdue follow-up.
+            A clear view of cash, jobs, quotes, and overdue follow-up.
           </p>
         </div>
         <div className="shrink-0 mt-1">
@@ -513,7 +513,7 @@ export default async function DashboardPage({
       </section>
 
       <section className="mt-8">
-        <SectionLabel eyebrow="Pipeline summary" title="Lead → Quote → Won Job → Invoiced → Paid" description="A compact view of the pipeline stages owners care about most." />
+        <SectionLabel eyebrow="Pipeline summary" title="Lead → Quote → Won Job → Invoiced → Paid" description="A compact view of the stages that matter most." />
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {pipelineStages.map((stage, index) => (
             <Link

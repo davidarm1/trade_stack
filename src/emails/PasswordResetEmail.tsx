@@ -1,39 +1,42 @@
-import { Button, Link, Section, Text } from "@react-email/components";
-import { EmailShell, emailStyles } from "./EmailShell";
+import { Link, Text } from "@react-email/components";
+import { TradeCompanyEmail } from "./TradeCompanyEmail";
+
+const textStyle = {
+  margin: "0 0 16px",
+  fontSize: "16px",
+  lineHeight: "26px",
+  color: "#0f172a",
+} as const;
 
 export function PasswordResetEmail(props: { resetUrl: string }) {
   return (
-    <EmailShell
+    <TradeCompanyEmail
       preview="Reset your Trade Stack Cloud password"
-      heading="You requested a password reset for your Trade Stack Cloud account"
-      footerNote={
+      eyebrow="Password reset"
+      heading="Reset your password"
+      companyName="Trade Stack Cloud"
+      intro={
+        <Text style={textStyle}>
+          Click the button below to reset your password and return to your account.
+        </Text>
+      }
+      primaryAction={{ label: "Reset my password", href: props.resetUrl }}
+      supportingText={
         <>
-          This message was sent by <strong>Trade Stack Cloud</strong>.
+          <Text style={textStyle}>This link expires in 1 hour for your security.</Text>
+          <Text style={textStyle}>
+            If you didn’t request this, you can safely ignore this email.
+          </Text>
+          <Text style={{ ...textStyle, marginBottom: 0 }}>
+            If the button does not work, copy and paste this URL into your browser:
+          </Text>
+          <Text style={{ ...textStyle, marginBottom: 0 }}>
+            <Link href={props.resetUrl} style={{ color: "#0f172a", wordBreak: "break-all" }}>
+              {props.resetUrl}
+            </Link>
+          </Text>
         </>
       }
-    >
-      <Text style={emailStyles.text}>
-        Click the button below to reset your password and return to your account.
-      </Text>
-      <Section style={{ margin: "24px 0" }}>
-        <Button style={emailStyles.button} href={props.resetUrl}>
-          Reset my password
-        </Button>
-      </Section>
-      <Text style={emailStyles.text}>
-        This link expires in 1 hour for your security.
-      </Text>
-      <Text style={emailStyles.text}>
-        If you didn’t request this, you can safely ignore this email.
-      </Text>
-      <Text style={{ ...emailStyles.text, marginBottom: 0 }}>
-        Or copy and paste this URL into your browser:
-      </Text>
-      <Text style={{ ...emailStyles.text, marginBottom: 0 }}>
-        <Link href={props.resetUrl} style={emailStyles.link}>
-          {props.resetUrl}
-        </Link>
-      </Text>
-    </EmailShell>
+    />
   );
 }

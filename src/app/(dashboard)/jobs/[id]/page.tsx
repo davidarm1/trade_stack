@@ -212,6 +212,7 @@ export default async function Page({
           jobId={j.id}
           jobNumber={jobNo}
           jobTitle={titleStr}
+          currentJobSheetUrl={b2DownloadPathFromStoredValue(j.jobsheet_url)}
           assignedEngineerMembershipId={
             typeof j.assigned_engineer_membership_id === "string"
               ? j.assigned_engineer_membership_id
