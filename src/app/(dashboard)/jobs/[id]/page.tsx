@@ -11,6 +11,7 @@ import {
 } from "@/lib/job-number";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 import { JobDetailActions } from "./job-detail-actions";
+import { ClientNameEditor } from "./client-name-editor";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 
 const CURRENCY_TO_LOCALE: Record<string, string> = {
@@ -290,7 +291,9 @@ export default async function Page({
             <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-slate-500">Client</dt>
-                <dd className="text-slate-900">{clientName}</dd>
+                <dd className="text-slate-900">
+                  <ClientNameEditor clientId={j.client_id ?? null} clientName={clientName} />
+                </dd>
               </div>
               <div>
                 <dt className="text-slate-500">Engineer</dt>

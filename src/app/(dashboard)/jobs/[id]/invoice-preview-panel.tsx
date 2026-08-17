@@ -124,7 +124,7 @@ export function InvoicePreviewPanel({
     setBusy("client_name");
     setMsg(null);
     const nextName = fields.client_name.trim() || clientName || "Client";
-    const { error } = await updateClient(clientId, { company_name: nextName } as never);
+    const { error } = await updateClient(clientId, { company_name: nextName });
     setBusy(null);
     if (error) {
       setMsg(error);
