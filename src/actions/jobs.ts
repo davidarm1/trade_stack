@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { jobMatchesSearch } from "@/lib/job-number";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
-import { uploadToB2, publicUrlForB2Key } from "@/lib/b2";
+import { uploadToB2, publicUrlForB2Key, getSignedDownloadUrl } from "@/lib/b2";
 import {
   b2DownloadPathForKey,
   b2DownloadPathFromStoredValue,
+  normalizeB2ObjectKey,
   publicUrlFromStoredValue,
 } from "@/lib/b2-links";
 import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
@@ -138,6 +139,25 @@ function finiteOrZero(value: unknown): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+async function fetchStoredPdfAttachment(args: {
+  storedValue: string | null | undefined;
+  fileName: string;
+}): Promise<{ filename: string; content: Buffer; contentType: string } | null> {
+  const key = normalizeB2ObjectKey(args.storedValue);
+  if (!key) return null;
+  const signedUrl = await getSignedDownloadUrl(key, 900);
+  const response = await fetch(signedUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch attachment: ${response.status} ${response.statusText}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return {
+    filename: args.fileName,
+    content: buffer,
+    contentType: "application/pdf",
+  };
 }
 
 async function recalcAndPersistJobTotals(args: {
@@ -617,6 +637,17 @@ export async function sendJobSheetEmail(
     return { data: null, error: jobMetaErr?.message ?? "Job not found." };
   }
 
+  const { data: currentInvoiceVersion, error: invoiceErr } = await supabase
+    .from("job_invoice_versions")
+    .select("file_name, public_url, b2_key")
+    .eq("tenant_id", ctx.tenantId)
+    .eq("job_id", jobId)
+    .eq("is_current", true)
+    .maybeSingle();
+  if (invoiceErr) {
+    return { data: null, error: invoiceErr.message };
+  }
+
   const [{ data: tenant }, { data: settingRows }] = await Promise.all([
     supabase
       .from("tenants")
@@ -660,34 +691,51 @@ export async function sendJobSheetEmail(
     title: String(jobMeta.title ?? "Job Sheet"),
   });
   const subject = `${companyName} — ${subjectCore} — Job Sheet`;
-  const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
+  const invoicePublicUrl = publicUrlFromStoredValue(currentInvoiceVersion?.public_url);
+  const jobSheetPublicUrl = publicUrlFromStoredValue(jobMeta.jobsheet_url);
+  const invoiceAttachment = await fetchStoredPdfAttachment({
+    storedValue: currentInvoiceVersion?.b2_key ?? currentInvoiceVersion?.public_url ?? null,
+    fileName:
+      String(currentInvoiceVersion?.file_name ?? "").trim() ||
+      `${companyName.replace(/[^\w-]+/g, "_") || "invoice"}.pdf`,
+  });
+  const jobSheetAttachment = await fetchStoredPdfAttachment({
+    storedValue: jobMeta.jobsheet_url,
+    fileName: `${String(jobMeta.title ?? "job-sheet").trim().replace(/[^\w-]+/g, "_") || "job-sheet"}.pdf`,
+  });
   const html = await renderTradeCompanyEmail({
-    preview: `${companyName} job sheet`,
-    eyebrow: "Job sheet",
-    heading: `${companyName} job sheet`,
+    preview: `${companyName} invoice and job sheet`,
+    eyebrow: undefined,
+    heading: `${companyName} invoice and job sheet`,
     companyName,
     companyLogoUrl,
     companyContactLines: companyContactParts,
-    intro: `Hello, please find the job sheet for ${companyName} attached. Public links are below.`,
-    primaryAction: storedJobSheetLink ? { label: "Open job sheet PDF", href: storedJobSheetLink } : undefined,
-    secondaryActions: [],
+    intro: `Hello, please find the invoice and job sheet for ${companyName} attached. Public links are below.`,
+    primaryAction: invoicePublicUrl ? { label: "Open invoice PDF", href: invoicePublicUrl } : undefined,
+    secondaryActions: jobSheetPublicUrl ? [{ label: "Open job sheet PDF", href: jobSheetPublicUrl }] : [],
     footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
   });
   const text = [
     "Hello,",
     "",
-    `Please find the job sheet for ${companyName} below. The public link is included.`,
+    `Please find the invoice and job sheet for ${companyName} attached.`,
+    "Public links are included below:",
+    ...(invoicePublicUrl ? [invoicePublicUrl] : []),
+    ...(jobSheetPublicUrl ? [jobSheetPublicUrl] : []),
     "",
     companyName,
     ...companyContactParts,
-    "",
-    ...(storedJobSheetLink ? ["", storedJobSheetLink] : []),
     "",
     "If you have any questions, please reply to this email.",
     `Sent via Trade Stack on behalf of ${companyName}.`,
   ]
     .filter(Boolean)
     .join("\n");
+  const attachments = [invoiceAttachment, jobSheetAttachment].filter(Boolean) as Array<{
+    filename: string;
+    content: Buffer;
+    contentType: string;
+  }>;
 
   try {
     await sendInvoiceEmail({
@@ -697,6 +745,7 @@ export async function sendJobSheetEmail(
       text,
       fromName: companyName,
       replyTo: companyEmail || undefined,
+      attachments,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Email send failed.";

@@ -125,7 +125,7 @@ const styles = {
 
 export type TradeCompanyEmailProps = {
   preview: string;
-  eyebrow: string;
+  eyebrow?: string;
   heading: string;
   companyName: string;
   companyLogoUrl?: string | null;
@@ -151,7 +151,7 @@ export function TradeCompanyEmail(props: TradeCompanyEmailProps) {
           <Section style={styles.card}>
             <div style={styles.accentBar} />
             <div style={styles.inner}>
-              <Text style={styles.eyebrow}>{props.eyebrow}</Text>
+              {props.eyebrow ? <Text style={styles.eyebrow}>{props.eyebrow}</Text> : null}
               {props.companyLogoUrl ? (
                 <p style={styles.logoWrap}>
                   <Img
