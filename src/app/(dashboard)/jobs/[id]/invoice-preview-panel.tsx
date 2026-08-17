@@ -26,6 +26,7 @@ type Props = {
     reason: string | null;
     file_name: string;
     public_url: string;
+    sent_to_email: string | null;
     is_current: boolean;
     created_at: string;
   }>;
@@ -456,6 +457,9 @@ export function InvoicePreviewPanel({
                   <p className="text-xs text-slate-500">
                     {new Date(v.created_at).toLocaleString("en-GB")}
                     {v.reason ? ` · ${v.reason}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Sent to: {v.sent_to_email?.trim() || "—"}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">

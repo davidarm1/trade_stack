@@ -30,6 +30,7 @@ type JobInvoiceVersion = {
   file_name: string;
   public_url: string;
   b2_key?: string | null;
+  sent_to_email: string | null;
   is_current: boolean;
   created_at: string;
 };
@@ -376,14 +377,30 @@ export async function getJobInvoiceVersions(jobId: string): Promise<{
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("job_invoice_versions")
-    .select("id, version_no, reason, file_name, b2_key, public_url, is_current, created_at")
-    .eq("tenant_id", ctx.tenantId)
-    .eq("job_id", jobId)
-    .order("version_no", { ascending: false });
+  const [{ data: versions, error }, { data: logs, error: logError }] = await Promise.all([
+    supabase
+      .from("job_invoice_versions")
+      .select("id, version_no, reason, file_name, b2_key, public_url, is_current, created_at")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("job_id", jobId)
+      .order("version_no", { ascending: false }),
+    supabase
+      .from("job_invoice_send_log")
+      .select("sent_to_email")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("job_id", jobId)
+      .order("sent_at", { ascending: false }),
+  ]);
   if (error) return { data: null, error: error.message };
-  return { data: (data ?? []) as JobInvoiceVersion[], error: null };
+  if (logError) return { data: null, error: logError.message };
+  const logRows = logs ?? [];
+  return {
+    data: (versions ?? []).map((version, index) => ({
+      ...(version as Omit<JobInvoiceVersion, "sent_to_email">),
+      sent_to_email: String(logRows[index]?.sent_to_email ?? "").trim() || null,
+    })),
+    error: null,
+  };
 }
 
 export async function sendJobInvoice(
