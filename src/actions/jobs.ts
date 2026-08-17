@@ -663,12 +663,12 @@ export async function sendJobSheetEmail(
   const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
   const html = await renderTradeCompanyEmail({
     preview: `${companyName} job sheet`,
-    eyebrow: "Job sheet from your trade company",
+    eyebrow: "Job sheet",
     heading: `${companyName} job sheet`,
     companyName,
     companyLogoUrl,
     companyContactLines: companyContactParts,
-    intro: `Hello, please find the job sheet for ${companyName} below. The public link is included.`,
+    intro: `Hello, please find the job sheet for ${companyName} attached. Public links are below.`,
     primaryAction: storedJobSheetLink ? { label: "Open job sheet PDF", href: storedJobSheetLink } : undefined,
     secondaryActions: [],
     footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
