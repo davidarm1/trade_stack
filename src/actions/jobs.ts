@@ -5,9 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { jobMatchesSearch } from "@/lib/job-number";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
-import { uploadToB2 } from "@/lib/b2";
-import { b2DownloadPathForKey, b2DownloadPathFromStoredValue } from "@/lib/b2-links";
-import { appOrigin } from "@/lib/auth-links";
+import { uploadToB2, publicUrlForB2Key } from "@/lib/b2";
+import {
+  b2DownloadPathForKey,
+  b2DownloadPathFromStoredValue,
+  publicUrlFromStoredValue,
+} from "@/lib/b2-links";
 import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
 import { sendInvoiceEmail } from "@/lib/resend";
 import { renderTradeCompanyEmail } from "@/emails/TradeCompanyEmail";
@@ -462,6 +465,7 @@ export async function sendJobInvoice(
   const key = `tradestack/${ctx.tenantId}/invoices/${jobId}/v${nextVersion}_${fileName}`;
   await uploadToB2(buffer, key, "application/pdf");
   const downloadUrl = b2DownloadPathForKey(key);
+  const publicInvoiceUrl = publicUrlForB2Key(key);
 
   const now = new Date().toISOString();
 
@@ -503,24 +507,17 @@ export async function sendJobInvoice(
     title: String(jobMeta.title ?? "Invoice"),
   });
   const subject = `${companyName} — ${subjectCore}`;
-  const appUrl = appOrigin();
-  const invoiceLink = new URL(downloadUrl, appUrl).toString();
-  const jobSheetPageLink = `${appUrl}/jobs/${jobId}/job-sheet`;
-  const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
-  const storedJobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
+  const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
   const html = await renderTradeCompanyEmail({
     preview: `${companyName} invoice`,
-    eyebrow: "Invoice from your trade company",
+    eyebrow: "Invoice",
     heading: `${companyName} invoice`,
     companyName,
     companyLogoUrl,
     companyContactLines: companyContactParts,
-    intro: `Hello, please find the invoice for ${companyName} attached. The secure links are below.`,
-    primaryAction: { label: "Open invoice PDF", href: invoiceLink },
-    secondaryActions: [
-      { label: "Open job sheet", href: jobSheetPageLink },
-      ...(storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : []),
-    ],
+    intro: `Hello, please find the invoice for ${companyName} attached. The public links are below.`,
+    primaryAction: { label: "Open invoice PDF", href: publicInvoiceUrl },
+    secondaryActions: storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : [],
     supportingText: trimmedReason ? `Reason for this version: ${trimmedReason}` : undefined,
     footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
   });
@@ -528,14 +525,11 @@ export async function sendJobInvoice(
     "Hello,",
     "",
     `Please find the invoice for ${companyName} attached.`,
-    "A secure download link is included below:",
-    invoiceLink,
+    "Public links are included below:",
+    publicInvoiceUrl,
     "",
     companyName,
     ...companyContactParts,
-    "",
-    "Open job sheet:",
-    jobSheetPageLink,
     ...(storedJobSheetLink ? ["", "Open job sheet PDF:", storedJobSheetLink] : []),
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
@@ -666,10 +660,7 @@ export async function sendJobSheetEmail(
     title: String(jobMeta.title ?? "Job Sheet"),
   });
   const subject = `${companyName} — ${subjectCore} — Job Sheet`;
-  const appUrl = appOrigin();
-  const jobSheetPageLink = `${appUrl}/jobs/${jobId}/job-sheet`;
-  const storedJobSheetPath = b2DownloadPathFromStoredValue(jobMeta.jobsheet_url);
-  const storedJobSheetLink = storedJobSheetPath ? new URL(storedJobSheetPath, appUrl).toString() : null;
+  const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
   const html = await renderTradeCompanyEmail({
     preview: `${companyName} job sheet`,
     eyebrow: "Job sheet from your trade company",
@@ -677,22 +668,19 @@ export async function sendJobSheetEmail(
     companyName,
     companyLogoUrl,
     companyContactLines: companyContactParts,
-    intro: `Hello, please find the job sheet for ${companyName} below. A secure download link is also included.`,
-    primaryAction: { label: "Open job sheet", href: jobSheetPageLink },
-    secondaryActions: storedJobSheetLink
-      ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }]
-      : [],
+    intro: `Hello, please find the job sheet for ${companyName} below. The public link is included.`,
+    primaryAction: storedJobSheetLink ? { label: "Open job sheet PDF", href: storedJobSheetLink } : undefined,
+    secondaryActions: [],
     footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
   });
   const text = [
     "Hello,",
     "",
-    `Please find the job sheet for ${companyName} below. A secure download link is also included.`,
+    `Please find the job sheet for ${companyName} below. The public link is included.`,
     "",
     companyName,
     ...companyContactParts,
     "",
-    jobSheetPageLink,
     ...(storedJobSheetLink ? ["", storedJobSheetLink] : []),
     "",
     "If you have any questions, please reply to this email.",

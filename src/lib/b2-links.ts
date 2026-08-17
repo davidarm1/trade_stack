@@ -1,3 +1,5 @@
+import { publicUrlForB2Key } from "@/lib/b2";
+
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -24,6 +26,18 @@ export function normalizeB2ObjectKey(input: string | null | undefined): string |
     return b2KeyFromPublicUrl(decoded);
   }
 
+  if (decoded.startsWith("/api/files/download?")) {
+    const params = new URLSearchParams(decoded.split("?")[1] ?? "");
+    const key = params.get("key");
+    if (key) return normalizeB2ObjectKey(key);
+  }
+
+  if (decoded.startsWith("api/files/download?")) {
+    const params = new URLSearchParams(decoded.split("?")[1] ?? "");
+    const key = params.get("key");
+    if (key) return normalizeB2ObjectKey(key);
+  }
+
   const key = decoded.replace(/^\/+/, "");
   if (!key.startsWith("tradestack/")) return null;
   if (key.includes("\\")) return null;
@@ -33,6 +47,11 @@ export function normalizeB2ObjectKey(input: string | null | undefined): string |
     return null;
   }
   return key;
+}
+
+export function publicUrlFromStoredValue(value: string | null | undefined): string | null {
+  const key = normalizeB2ObjectKey(value);
+  return key ? publicUrlForB2Key(key) : null;
 }
 
 export function b2KeyFromPublicUrl(publicUrl: string): string | null {
