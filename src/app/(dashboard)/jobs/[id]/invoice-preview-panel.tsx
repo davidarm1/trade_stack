@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   replaceJobInvoiceMaterials,
   updateJob,
@@ -31,6 +32,7 @@ type Props = {
     created_at: string;
   }>;
   clientId: string | null;
+  clientName: string;
   initial: {
     custom_invoice_number: string | null;
     custom_po_number: string | null;
@@ -65,10 +67,12 @@ export function InvoicePreviewPanel({
   currentJobSheetUrl,
   invoiceVersions,
   clientId,
+  clientName,
   initial,
   addressInitial,
   jobSheetInitial,
 }: Props) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"invoice" | "jobsheet">("invoice");
   const [showEditor, setShowEditor] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -76,6 +80,7 @@ export function InvoicePreviewPanel({
   const [version, setVersion] = useState(0);
   const [savedJobSheetUrl, setSavedJobSheetUrl] = useState(currentJobSheetUrl);
   const [fields, setFields] = useState({
+    client_name: clientName,
     custom_invoice_number: initial.custom_invoice_number ?? "",
     custom_po_number: initial.custom_po_number ?? "",
     client_order_number: initial.client_order_number ?? "",
@@ -113,6 +118,21 @@ export function InvoicePreviewPanel({
     () => `/jobs/${jobId}/job-sheet?embed=1&v=${version}`,
     [jobId, version],
   );
+
+  async function saveClientName() {
+    if (busy || !clientId) return;
+    setBusy("client_name");
+    setMsg(null);
+    const nextName = fields.client_name.trim() || clientName || "Client";
+    const { error } = await updateClient(clientId, { company_name: nextName } as never);
+    setBusy(null);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    setMsg("Client name saved.");
+    router.refresh();
+  }
 
   async function saveField(
     key:
@@ -167,6 +187,7 @@ export function InvoicePreviewPanel({
 
     if (clientId) {
       const billingPayload = {
+        company_name: fields.client_name.trim() || clientName || "Client",
         address1: addressFields.billing_address1.trim() || null,
         address2: addressFields.billing_address2.trim() || null,
         town: addressFields.billing_town.trim() || null,
@@ -277,8 +298,19 @@ export function InvoicePreviewPanel({
 
       {showEditor ? (
         <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="text-xs text-slate-600">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-xs text-slate-600 sm:col-span-2">
+            Client name
+            <input
+              className={inputCls}
+              value={fields.client_name}
+              onChange={(e) =>
+                setFields((f) => ({ ...f, client_name: e.target.value }))
+              }
+              onBlur={() => void saveClientName()}
+            />
+          </label>
+          <label className="text-xs text-slate-600">
               Invoice number
               <input
                 className={inputCls}

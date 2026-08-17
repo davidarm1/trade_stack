@@ -430,6 +430,7 @@ export default async function Page({
           currentJobSheetUrl={b2DownloadPathFromStoredValue(j.jobsheet_url)}
           invoiceVersions={invoiceVersions}
           clientId={j.client_id ?? null}
+          clientName={clientName}
           addressInitial={addressInitial}
           initial={{
             custom_invoice_number: j.custom_invoice_number ?? null,
