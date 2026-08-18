@@ -1,6 +1,8 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
+import { compactTemplateBlock, multilineTemplateBlock } from "@/lib/text-template";
+import { resolveInvoiceFooterText } from "@/lib/invoice-footer";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -94,6 +96,57 @@ export async function buildStoredInvoicePdf(args: {
   ]
     .map((v) => String(v || "").trim())
     .filter(Boolean);
+  const companyAddressLines = [
+    settings.address_line_1 || settings.company_address1 || tenant?.address1 || "",
+    settings.address_line_2 || settings.company_address2 || tenant?.address2 || "",
+    settings.town || settings.company_town || tenant?.town || "",
+    settings.postcode || settings.company_postcode || tenant?.postcode || "",
+  ]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+  const bankLines = [
+    settings.bank_account_name || tenant?.bank_account_name
+      ? `Account name: ${settings.bank_account_name || tenant?.bank_account_name}`
+      : null,
+    settings.bank_name || tenant?.bank_name ? `Bank: ${settings.bank_name || tenant?.bank_name}` : null,
+    settings.bank_sort_code || tenant?.bank_sort_code ? `Sort code: ${settings.bank_sort_code || tenant?.bank_sort_code}` : null,
+    settings.bank_account_number || tenant?.bank_account_number
+      ? `Account number: ${settings.bank_account_number || tenant?.bank_account_number}`
+      : null,
+    settings.bank_iban || tenant?.bank_iban ? `IBAN: ${settings.bank_iban || tenant?.bank_iban}` : null,
+    settings.bank_swift || tenant?.bank_swift ? `SWIFT/BIC: ${settings.bank_swift || tenant?.bank_swift}` : null,
+  ].filter(Boolean) as string[];
+  const footerTemplate = String(settings.invoice_footer_text || tenant?.invoice_footer_text || "").trim();
+  const footerValues = {
+    company_name: companyName,
+    address: compactTemplateBlock(companyAddressLines),
+    address_block: multilineTemplateBlock(companyAddressLines),
+    email:
+      String(settings.email || settings.company_email || tenant?.email || "")
+        .trim(),
+    phone:
+      String(settings.phone || settings.company_phone || tenant?.phone || "")
+        .trim(),
+    company_no: String(tenant?.company_reg_number ?? "").trim(),
+    vat_no: String(tenant?.vat_number ?? "").trim(),
+    bank_name: String(settings.bank_name || tenant?.bank_name || "").trim(),
+    bank_account_name: String(
+      settings.bank_account_name || tenant?.bank_account_name || "",
+    ).trim(),
+    bank_account_number: String(
+      settings.bank_account_number || tenant?.bank_account_number || "",
+    ).trim(),
+    bank_sort_code: String(settings.bank_sort_code || tenant?.bank_sort_code || "").trim(),
+    bank_iban: String(settings.bank_iban || tenant?.bank_iban || "").trim(),
+    bank_swift: String(settings.bank_swift || tenant?.bank_swift || "").trim(),
+    bank_details: multilineTemplateBlock(bankLines),
+    bank_details_inline: compactTemplateBlock(bankLines),
+  };
+  const invoiceFooterText = resolveInvoiceFooterText({
+    template: footerTemplate,
+    values: footerValues,
+    paymentTermsDays: Number(job.payment_terms_days ?? tenant?.default_payment_terms_days ?? 30),
+  });
 
   const billingTo = [
     client?.company_name || client?.contact_name || "",
@@ -362,6 +415,20 @@ export async function buildStoredInvoicePdf(args: {
     size: 15,
     color: NAVY,
   });
+
+  const footerLines = wrapText(invoiceFooterText, font, 9, right - margin);
+  if (footerLines.length > 0) {
+    const footerStartY = Math.max(44, y - 30);
+    footerLines.forEach((line: string, idx: number) => {
+      page.drawText(line, {
+        x: margin,
+        y: footerStartY - idx * 11,
+        size: 9,
+        font,
+        color: TEXT,
+      });
+    });
+  }
 
   const bytes = await pdf.save();
   return { buffer: Buffer.from(bytes), fileName };

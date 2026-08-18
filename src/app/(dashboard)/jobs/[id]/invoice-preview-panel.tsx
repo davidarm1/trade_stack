@@ -9,6 +9,7 @@ import {
   updateJobInvoiceDetails,
 } from "@/actions/jobs";
 import { updateClient } from "@/actions/clients";
+import { PAYMENT_TERMS_PRESETS } from "@/lib/payment-terms";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 
 type MaterialRow = {
@@ -131,6 +132,28 @@ export function InvoicePreviewPanel({
       return;
     }
     setMsg("Client name saved.");
+    router.refresh();
+  }
+
+  async function savePaymentTermsDays(nextValue: string) {
+    if (busy) return;
+    setBusy("payment_terms_days");
+    setMsg(null);
+    const normalized = nextValue.trim();
+    const { error } = await updateJobInvoiceDetails(jobId, {
+      custom_invoice_number: fields.custom_invoice_number.trim() || null,
+      custom_po_number: fields.custom_po_number.trim() || null,
+      client_order_number: fields.client_order_number.trim() || null,
+      payment_terms_days: normalized === "" ? null : Number(normalized),
+      labour_charge: fields.labour_charge.trim() === "" ? null : Number(fields.labour_charge),
+    });
+    setBusy(null);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    setVersion((v) => v + 1);
+    setMsg("Saved.");
     router.refresh();
   }
 
@@ -344,17 +367,32 @@ export function InvoicePreviewPanel({
               />
             </label>
             <label className="text-xs text-slate-600">
-              Payment terms (days)
-              <input
+              Payment terms
+              <select
                 className={inputCls}
-                type="number"
-                min="0"
-                value={fields.payment_terms_days}
-                onChange={(e) =>
-                  setFields((f) => ({ ...f, payment_terms_days: e.target.value }))
+                value={
+                  PAYMENT_TERMS_PRESETS.some(
+                    (days) => String(days) === fields.payment_terms_days,
+                  )
+                    ? fields.payment_terms_days
+                    : "14"
                 }
-                onBlur={() => void saveField("payment_terms_days")}
-              />
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFields((f) => ({ ...f, payment_terms_days: next }));
+                  void savePaymentTermsDays(next);
+                }}
+              >
+                {PAYMENT_TERMS_PRESETS.map((days) => (
+                  <option key={days} value={String(days)}>
+                    {days === 0
+                      ? "Due on receipt"
+                      : days === 30
+                        ? "1 month"
+                        : `${days} days`}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-xs text-slate-600 sm:col-span-2">
               Labour charge

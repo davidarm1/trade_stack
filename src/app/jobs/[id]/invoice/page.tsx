@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { createClient } from "@/lib/supabase/server";
-import { compactTemplateBlock, multilineTemplateBlock, renderTemplateText } from "@/lib/text-template";
+import { compactTemplateBlock, multilineTemplateBlock } from "@/lib/text-template";
+import { resolveInvoiceFooterText } from "@/lib/invoice-footer";
 import { InvoiceView } from "./invoice-view";
 
 export default async function JobInvoiceStandalonePage({
@@ -91,7 +92,11 @@ export default async function JobInvoiceStandalonePage({
       settings.bank_swift || tenant?.bank_swift ? `SWIFT/BIC: ${settings.bank_swift || tenant?.bank_swift}` : null,
     ]),
   };
-  const invoiceFooterText = renderTemplateText(footerTemplate, footerValues).trim() || "Thank you for your business.";
+  const invoiceFooterText = resolveInvoiceFooterText({
+    template: footerTemplate,
+    values: footerValues,
+    paymentTermsDays: job.payment_terms_days ?? tenant?.default_payment_terms_days ?? 30,
+  });
   const footerUsesBankDetails = /##(?:bank_[a-z0-9_]+|bank_details)##|\{\{(?:bank_[a-z0-9_]+|bank_details)\}\}/i.test(footerTemplate);
 
   return (

@@ -4,7 +4,8 @@ import { getSessionTenantOrError } from "@/lib/api-auth";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import { formatJobRefFormal } from "@/lib/job-number";
-import { compactTemplateBlock, multilineTemplateBlock, renderTemplateText } from "@/lib/text-template";
+import { compactTemplateBlock, multilineTemplateBlock } from "@/lib/text-template";
+import { resolveInvoiceFooterText } from "@/lib/invoice-footer";
 
 export const runtime = "nodejs";
 
@@ -167,8 +168,11 @@ export async function GET(
     bank_details: multilineTemplateBlock(bankLines),
     bank_details_inline: compactTemplateBlock(bankLines),
   };
-  const invoiceFooterText =
-    renderTemplateText(footerTemplate, footerValues).trim() || "Thank you for your business.";
+  const invoiceFooterText = resolveInvoiceFooterText({
+    template: footerTemplate,
+    values: footerValues,
+    paymentTermsDays: job.payment_terms_days ?? tenant?.default_payment_terms_days ?? 30,
+  });
   const footerUsesBankDetails = /##(?:bank_[a-z0-9_]+|bank_details)##|\{\{(?:bank_[a-z0-9_]+|bank_details)\}\}/i.test(footerTemplate);
 
   const clientName = text(client?.company_name ?? client?.contact_name);
@@ -578,10 +582,10 @@ export async function GET(
 
   const footerLines = invoiceFooterText
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line: string) => line.trim())
     .filter(Boolean);
   if (footerLines.length > 0) {
-    footerLines.forEach((line, idx) => {
+    footerLines.forEach((line: string, idx: number) => {
       page.drawText(line, {
         x: margin,
         y: footerY - 8 - idx * 11,
