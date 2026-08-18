@@ -361,8 +361,8 @@ export function SettingsForm({
             <p className="mt-1 text-xs text-slate-500">
               Printed at the bottom of every invoice PDF. Use placeholders like
               ##company_name##, ##address##, ##bank_details##, ##email##, ##phone##,
-              ##company_no##, ##vat_no##, ##payment_terms_days##, and
-              ##payment_terms_sentence##. Defaults to “Thank you for your business.” if left blank.
+              ##company_no##, ##vat_no##, ##payment_terms_days##, ##payment_terms_sentence##,
+              or [paymentdays]. Defaults to “Thank you for your business.” if left blank.
             </p>
             <textarea
               name="invoice_footer_text"
