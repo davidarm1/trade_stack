@@ -113,6 +113,29 @@ export async function updateJob(id: string, data: JobInsert) {
     (safe as Record<string, unknown>).received_from_engineer_at = null;
   }
 
+  // The live jobs table still carries the legacy assigned_engineer_id
+  // column (user id) and a CHECK constraint tying it to sent_to_engineer_at
+  // — the membership_id-only cleanup migration for jobs hasn't actually run
+  // against production yet (mirrors the mobile_access_tokens.user_id gap).
+  // Keep it in sync from the membership id until that migration lands.
+  if (
+    "assigned_engineer_membership_id" in safe &&
+    typeof safe.assigned_engineer_membership_id === "string" &&
+    safe.assigned_engineer_membership_id
+  ) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("id", safe.assigned_engineer_membership_id)
+      .eq("company_id", ctx.tenantId)
+      .maybeSingle();
+    if (membershipError) return { data: null, error: membershipError.message };
+    if (!membership?.user_id) {
+      return { data: null, error: "Could not resolve the selected engineer's account." };
+    }
+    (safe as Record<string, unknown>).assigned_engineer_id = membership.user_id;
+  }
+
   const { data: row, error } = await supabase
     .from("jobs")
     .update({ ...safe, updated_at: new Date().toISOString() })
