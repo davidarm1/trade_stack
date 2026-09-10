@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { getTimesheets } from "@/actions/timesheets";
-import { getTeamMembers } from "@/actions/team";
+import { getTeamMembersWithMembershipIds } from "@/actions/team";
 import { TimesheetsFilters } from "./timesheets-filters";
 
 export default async function TimesheetsPage({
@@ -9,7 +9,9 @@ export default async function TimesheetsPage({
   searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
   const params = await searchParams;
-  const team = await getTeamMembers();
+  // timesheets rows are keyed by membership_id, not user id — options must
+  // be membership ids too or the filter/name-match below silently miss.
+  const team = await getTeamMembersWithMembershipIds();
   const { data: rows, error } = await getTimesheets({
     userId: params.userId,
     from: params.from,
@@ -24,12 +26,7 @@ export default async function TimesheetsPage({
     );
   }
 
-  const userOptions = (team.data ?? []).map(
-    (u: { id: string; name: string | null }) => ({
-      id: u.id,
-      name: u.name,
-    }),
-  );
+  const userOptions = team.data ?? [];
 
   return (
     <div>
@@ -85,7 +82,7 @@ export default async function TimesheetsPage({
                 (t: {
                   id: string;
                   shift_date?: string | null;
-                  user_id?: string | null;
+                  membership_id?: string | null;
                   start_time?: string | null;
                   end_time?: string | null;
                   duration_minutes?: number | null;
@@ -98,8 +95,8 @@ export default async function TimesheetsPage({
                         : "—"}
                     </td>
                     <td className="px-4 py-3 text-slate-700">
-                      {userOptions.find((u) => u.id === t.user_id)?.name ??
-                        t.user_id ??
+                      {userOptions.find((u) => u.id === t.membership_id)?.name ??
+                        t.membership_id ??
                         "—"}
                     </td>
                     <td className="px-4 py-3 text-slate-700">

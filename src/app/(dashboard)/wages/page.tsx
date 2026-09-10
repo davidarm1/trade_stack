@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { getWages } from "@/actions/wages";
-import { getTeamMembers } from "@/actions/team";
+import { getTeamMembersWithMembershipIds } from "@/actions/team";
 import { getTenantCurrencyCode } from "@/lib/tenant-currency";
 import { WagesFilters } from "./wages-filters";
 import { WageRow } from "./wage-row";
@@ -12,7 +12,9 @@ export default async function WagesPage({
 }) {
   const params = await searchParams;
   const currencyCode = await getTenantCurrencyCode();
-  const team = await getTeamMembers();
+  // wages rows are keyed by membership_id, not user id — options must be
+  // membership ids too or the filter/name-match below silently miss.
+  const team = await getTeamMembersWithMembershipIds();
   const { data: rows, error } = await getWages({
     userId: params.userId,
     periodFrom: params.from,
@@ -27,12 +29,7 @@ export default async function WagesPage({
     );
   }
 
-  const userOptions = (team.data ?? []).map(
-    (u: { id: string; name: string | null }) => ({
-      id: u.id,
-      name: u.name,
-    }),
-  );
+  const userOptions = team.data ?? [];
 
   return (
     <div>
@@ -85,7 +82,7 @@ export default async function WagesPage({
                 (w: {
                   id: string;
                   period_date?: string | null;
-                  user_id?: string | null;
+                  membership_id?: string | null;
                   total_wage?: number | null;
                   travel_wage?: number | null;
                   approval_status?: string | null;
@@ -94,8 +91,8 @@ export default async function WagesPage({
                     key={w.id}
                     wage={w}
                     userName={
-                      userOptions.find((u) => u.id === w.user_id)?.name ??
-                      w.user_id ??
+                      userOptions.find((u) => u.id === w.membership_id)?.name ??
+                      w.membership_id ??
                       "—"
                     }
                     currencyCode={currencyCode}

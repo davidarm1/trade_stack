@@ -117,6 +117,52 @@ export async function getAssignableEngineers() {
   return { data: engineers, error: null };
 }
 
+// For filter dropdowns on pages (wages, timesheets) whose rows are keyed by
+// membership_id, not user id — includes inactive/leaver members too, unlike
+// getAssignableEngineers, so historical records for former staff stay
+// filterable. Members with no membership row yet are simply omitted rather
+// than self-healed, since this is a read-only listing.
+export async function getTeamMembersWithMembershipIds(): Promise<{
+  data: EngineerOption[] | null;
+  error: string | null;
+}> {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }] =
+    await Promise.all([
+      supabase
+        .from("users")
+        .select("id, name, email")
+        .eq("tenant_id", ctx.tenantId),
+      supabase
+        .from("memberships")
+        .select("id, user_id, display_name")
+        .eq("company_id", ctx.tenantId),
+    ]);
+
+  if (usersError) return { data: null, error: usersError.message };
+  if (membershipsError) return { data: null, error: membershipsError.message };
+
+  const membershipByUserId = new Map(
+    (memberships ?? []).map((m) => [m.user_id, m] as const),
+  );
+
+  const options = (users ?? [])
+    .map((u) => {
+      const membership = membershipByUserId.get(u.id);
+      if (!membership) return null;
+      return {
+        id: membership.id,
+        name: membership.display_name ?? u.name ?? u.email ?? membership.id,
+      };
+    })
+    .filter((v): v is EngineerOption => v !== null);
+
+  return { data: options, error: null };
+}
+
 export async function getTeamMembers() {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };

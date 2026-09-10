@@ -12,7 +12,7 @@ import { ApprovalBadge } from "./wages-filters";
 type WageRowData = {
   id: string;
   period_date?: string | null;
-  user_id?: string | null;
+  membership_id?: string | null;
   total_wage?: number | null;
   travel_wage?: number | null;
   approval_status?: string | null;
@@ -42,12 +42,12 @@ export function WageRow({
   const [applying, setApplying] = useState(false);
 
   async function checkHours() {
-    if (!wage.user_id || !periodFrom || !periodTo) return;
+    if (!wage.membership_id || !periodFrom || !periodTo) return;
     setChecking(true);
     setError(null);
     setPreview(null);
     const { data, error: err } = await getApprovedTravelHours(
-      wage.user_id,
+      wage.membership_id,
       periodFrom,
       periodTo,
     );

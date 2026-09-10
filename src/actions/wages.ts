@@ -97,7 +97,7 @@ export type ApprovedTravelHoursResult = {
  * tells the caller to flag that for manual review.
  */
 export async function getApprovedTravelHours(
-  userId: string,
+  membershipId: string,
   periodFrom: string,
   periodTo: string,
 ): Promise<{ data: ApprovedTravelHoursResult | null; error: string | null }> {
@@ -109,7 +109,7 @@ export async function getApprovedTravelHours(
     .from("timesheets")
     .select("travel_hours, job_id")
     .eq("tenant_id", ctx.tenantId)
-    .eq("membership_id", userId)
+    .eq("membership_id", membershipId)
     .eq("status", "approved")
     .gte("shift_date", periodFrom)
     .lte("shift_date", periodTo);
@@ -223,10 +223,25 @@ export async function applyTravelPayToWage(
   if (!wage) return { data: null, error: "Wage record not found." };
   if (!wage.membership_id) return { data: null, error: "Wage record has no user." };
 
+  // wage.membership_id is a memberships.id, not a users.id — resolve the
+  // underlying user before querying `users` (querying users by membership_id
+  // directly always missed, which surfaced as a misleading "no travel_rate
+  // set" error even when the user had one).
+  const { data: membership, error: membershipErr } = await supabase
+    .from("memberships")
+    .select("user_id")
+    .eq("id", wage.membership_id)
+    .eq("company_id", ctx.tenantId)
+    .maybeSingle();
+  if (membershipErr) return { data: null, error: membershipErr.message };
+  if (!membership?.user_id) {
+    return { data: null, error: "Could not resolve this wage record's user." };
+  }
+
   const { data: user, error: userErr } = await supabase
     .from("users")
     .select("travel_rate")
-    .eq("id", wage.membership_id)
+    .eq("id", membership.user_id)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
   if (userErr) return { data: null, error: userErr.message };
