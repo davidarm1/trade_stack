@@ -69,32 +69,54 @@ export async function getAcceptanceStatus() {
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  const [{ data: docs, error: docsErr }, { data: users, error: usersErr }, { data: acceptances, error: accErr }] =
-    await Promise.all([
-      supabase
-        .from("onboarding_documents")
-        .select("*")
-        .eq("tenant_id", ctx.tenantId)
-        .eq("required", true),
-      supabase
-        .from("users")
-        .select("id, name, email")
-        .eq("tenant_id", ctx.tenantId)
-        .eq("is_active", true),
-      supabase
-        .from("staff_acceptances")
-        .select("*")
-        .eq("tenant_id", ctx.tenantId),
-    ]);
+  const [
+    { data: docs, error: docsErr },
+    { data: users, error: usersErr },
+    { data: memberships, error: membershipsErr },
+    { data: acceptances, error: accErr },
+  ] = await Promise.all([
+    supabase
+      .from("onboarding_documents")
+      .select("*")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("required", true),
+    supabase
+      .from("users")
+      .select("id, name, email")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("is_active", true),
+    supabase
+      .from("memberships")
+      .select("id, user_id")
+      .eq("company_id", ctx.tenantId),
+    supabase
+      .from("staff_acceptances")
+      .select("*")
+      .eq("tenant_id", ctx.tenantId),
+  ]);
 
   if (docsErr) return { data: null, error: docsErr.message };
   if (usersErr) return { data: null, error: usersErr.message };
+  if (membershipsErr) return { data: null, error: membershipsErr.message };
   if (accErr) return { data: null, error: accErr.message };
 
+  // staff_acceptances.membership_id is a memberships.id, but the page below
+  // matches against the users list by user id — translate back to user id
+  // here rather than leaving downstream code comparing across the two id
+  // spaces (that mismatch is why sign-off status never showed as accepted).
+  const userIdByMembershipId = new Map(
+    (memberships ?? []).map((m) => [m.id, m.user_id] as const),
+  );
   const acceptedSet = new Set(
-    (acceptances ?? []).map(
-      (a: StaffAcceptance) => `${a.membership_id}:${a.document_id}:${a.document_version}`,
-    ),
+    (acceptances ?? [])
+      .map((a: StaffAcceptance) => {
+        const userId = a.membership_id
+          ? userIdByMembershipId.get(a.membership_id)
+          : (a as { user_id?: string | null }).user_id;
+        if (!userId) return null;
+        return `${userId}:${a.document_id}:${a.document_version}`;
+      })
+      .filter((v): v is string => v !== null),
   );
 
   return {
@@ -124,6 +146,7 @@ export async function createOnboardingDocument(args: {
       body: args.body,
       required: args.required,
       version: 1,
+      created_by_id: ctx.userId,
       created_by_membership_id: ctx.membershipId,
     })
     .select()
@@ -180,6 +203,7 @@ export async function acceptOnboardingDocument(documentId: string, version: numb
     .from("staff_acceptances")
     .insert({
       tenant_id: ctx.tenantId,
+      user_id: ctx.userId,
       membership_id: ctx.membershipId,
       document_id: documentId,
       document_version: version,

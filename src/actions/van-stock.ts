@@ -58,6 +58,7 @@ export async function allocateStockToVan(args: {
     direction: "out",
     quantity: args.quantity,
     vehicle_id: args.vehicleId,
+    user_id: ctx.userId,
     membership_id: ctx.membershipId,
     notes: "Allocated to van",
   });
@@ -128,6 +129,7 @@ export async function recordVanStockCheck(args: {
     .update({
       quantity: args.countedQuantity,
       last_checked_at: new Date().toISOString(),
+      last_checked_by_id: ctx.userId,
       last_checked_by_membership_id: ctx.membershipId,
       updated_at: new Date().toISOString(),
     })
