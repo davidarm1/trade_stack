@@ -182,6 +182,56 @@ async function requireTeamOwnerAccess(): Promise<{
   return access;
 }
 
+// Creates the membership row for a user if one doesn't already exist for this
+// tenant. Team members invited via inviteTeamMember get one immediately, but
+// this also self-heals older/edge-case users (invited before that fix, or
+// otherwise missing one) so actions that require a membership id — e.g.
+// mobile access tokens — don't fail with a spurious "User not found."
+async function ensureMembershipForUser(
+  tenantId: string,
+  user: { id: string; role: UserRole; name?: string | null },
+): Promise<{ membershipId: string | null; error: string | null }> {
+  const admin = createServiceRoleClient();
+
+  const { data: existing, error: existingError } = await admin
+    .from("memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("company_id", tenantId)
+    .maybeSingle();
+  if (existingError) return { membershipId: null, error: existingError.message };
+  if (existing?.id) return { membershipId: existing.id, error: null };
+
+  const now = new Date().toISOString();
+  const { data: created, error: createError } = await admin
+    .from("memberships")
+    .upsert(
+      {
+        user_id: user.id,
+        company_id: tenantId,
+        role: String(user.role ?? "viewer"),
+        status: "active",
+        display_name: user.name ?? null,
+        job_title: null,
+        employee_ref: null,
+        work_phone: null,
+        concurrent_allowed: false,
+        created_at: now,
+        updated_at: now,
+      },
+      { onConflict: "user_id,company_id" },
+    )
+    .select("id")
+    .single();
+  if (createError || !created) {
+    return {
+      membershipId: null,
+      error: createError?.message ?? "Could not create membership record.",
+    };
+  }
+  return { membershipId: created.id, error: null };
+}
+
 async function getTargetUserForTenant(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
@@ -189,14 +239,25 @@ async function getTargetUserForTenant(
 ): Promise<{ id: string; membershipId: string; role: UserRole } | null> {
   const { data } = await supabase
     .from("users")
-    .select("id, role, memberships!inner(id)")
+    .select("id, role, name, memberships(id)")
     .eq("id", userId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!data?.id || !data?.role) return null;
-  const membershipId =
+
+  let membershipId =
     (data as { memberships?: { id?: string }[] }).memberships?.[0]?.id ?? null;
-  if (!membershipId) return null;
+
+  if (!membershipId) {
+    const ensured = await ensureMembershipForUser(tenantId, {
+      id: data.id,
+      role: data.role as UserRole,
+      name: (data as { name?: string | null }).name ?? null,
+    });
+    if (!ensured.membershipId) return null;
+    membershipId = ensured.membershipId;
+  }
+
   return { id: data.id, membershipId, role: data.role as UserRole };
 }
 
@@ -408,6 +469,17 @@ export async function inviteTeamMember(
   if (upsertErr) {
     await admin.auth.admin.deleteUser(userId);
     return { data: null, error: upsertErr.message };
+  }
+
+  const membershipResult = await ensureMembershipForUser(tenantId, {
+    id: userId,
+    role,
+    name: trimmedName || null,
+  });
+  if (!membershipResult.membershipId) {
+    await admin.from("users").delete().eq("id", userId).eq("tenant_id", tenantId);
+    await admin.auth.admin.deleteUser(userId);
+    return { data: null, error: membershipResult.error ?? "Could not create membership record." };
   }
 
   await sendInviteEmail({
