@@ -145,7 +145,7 @@ async function requireTeamManagerAccess(): Promise<{
   const supabase = await createClient();
   const { data: me, error } = await supabase
     .from("users")
-    .select("role")
+    .select("role, name")
     .eq("id", ctx.userId)
     .maybeSingle();
   if (error || !me?.role) {
@@ -154,12 +154,35 @@ async function requireTeamManagerAccess(): Promise<{
   if (me.role !== "owner" && me.role !== "office") {
     return { ok: false, error: "Only owners and office staff can manage team access." };
   }
+
+  // ctx.membershipId is null when the actor themselves has no active
+  // memberships row yet (same gap ensureMembershipForUser self-heals for
+  // target users below). Falling back to ctx.userId here would hand a raw
+  // auth user id to code that treats it as a memberships.id foreign key
+  // (e.g. mobile_access_tokens.created_by_membership_id) and violate the FK
+  // constraint, so self-heal the actor's own membership instead.
+  let membershipId = ctx.membershipId;
+  if (!membershipId) {
+    const ensured = await ensureMembershipForUser(ctx.tenantId, {
+      id: ctx.userId,
+      role: me.role as UserRole,
+      name: (me as { name?: string | null }).name ?? null,
+    });
+    if (!ensured.membershipId) {
+      return {
+        ok: false,
+        error: ensured.error ?? "Could not resolve your membership record.",
+      };
+    }
+    membershipId = ensured.membershipId;
+  }
+
   return {
     ok: true,
     supabase,
     actor: {
       userId: ctx.userId,
-      membershipId: ctx.membershipId ?? ctx.userId,
+      membershipId,
       tenantId: ctx.tenantId,
       role: me.role as UserRole,
     },
