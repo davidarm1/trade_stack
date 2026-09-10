@@ -374,12 +374,30 @@ export async function updateJobCompletionDetails(
     return { data: null, error: jobErr?.message ?? "Job not found" };
   }
 
+  // job_completions.engineer_id expects a user id, not a membership id —
+  // resolve it from the membership. engineer_membership_id is the intended
+  // long-term column (see 20260812120000_memberships_actor_columns.sql);
+  // both are written until the legacy engineer_id column is actually
+  // dropped from production.
+  let engineerUserId: string | null = null;
+  if (job.assigned_engineer_membership_id) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("id", job.assigned_engineer_membership_id)
+      .eq("company_id", ctx.tenantId)
+      .maybeSingle();
+    if (membershipError) return { data: null, error: membershipError.message };
+    engineerUserId = membership?.user_id ?? null;
+  }
+
   const { data: row, error } = await supabase
     .from("job_completions")
     .insert({
       tenant_id: ctx.tenantId,
       job_id: id,
-      engineer_id: job.assigned_engineer_membership_id ?? null,
+      engineer_id: engineerUserId,
+      engineer_membership_id: job.assigned_engineer_membership_id ?? null,
       ...payload,
       submitted_at: now,
       date_completed: now.slice(0, 10),
