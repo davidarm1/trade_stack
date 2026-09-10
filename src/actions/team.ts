@@ -237,16 +237,29 @@ async function getTargetUserForTenant(
   tenantId: string,
   userId: string,
 ): Promise<{ id: string; membershipId: string; role: UserRole } | null> {
-  const { data } = await supabase
+  // Two flat queries instead of an embedded `memberships(id)` select: the
+  // memberships.user_id FK points at auth.users, not public.users, so
+  // PostgREST has no relationship to embed through and the nested select
+  // errors out (silently, since we don't surface query errors here) — every
+  // call would hit that, not just users missing a memberships row. This
+  // mirrors the working two-query pattern in getAssignableEngineers above.
+  const { data, error: userError } = await supabase
     .from("users")
-    .select("id, role, name, memberships(id)")
+    .select("id, role, name")
     .eq("id", userId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
-  if (!data?.id || !data?.role) return null;
+  if (userError || !data?.id || !data?.role) return null;
 
-  let membershipId =
-    (data as { memberships?: { id?: string }[] }).memberships?.[0]?.id ?? null;
+  const { data: membership, error: membershipError } = await supabase
+    .from("memberships")
+    .select("id")
+    .eq("user_id", data.id)
+    .eq("company_id", tenantId)
+    .maybeSingle();
+  if (membershipError) return null;
+
+  let membershipId = membership?.id ?? null;
 
   if (!membershipId) {
     const ensured = await ensureMembershipForUser(tenantId, {
