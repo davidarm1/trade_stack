@@ -132,6 +132,14 @@ export async function updateJob(id: string, data: JobInsert) {
       .maybeSingle();
     if (membershipError) return { data: null, error: membershipError.message };
     if (!membership?.user_id) {
+      // TEMPORARY diagnostic — remove once the cause of this miss is found.
+      console.error("[updateJob] could not resolve engineer membership", {
+        jobId: id,
+        actorUserId: ctx.userId,
+        actorTenantId: ctx.tenantId,
+        actorMembershipId: ctx.membershipId,
+        selectedMembershipId: safe.assigned_engineer_membership_id,
+      });
       return { data: null, error: "Could not resolve the selected engineer's account." };
     }
     (safe as Record<string, unknown>).assigned_engineer_id = membership.user_id;
