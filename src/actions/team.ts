@@ -856,6 +856,12 @@ export async function generateMobileAccessToken(userId: string) {
       .insert({
         tenant_id: actor.tenantId,
         membership_id: target.membershipId,
+        // The live mobile_access_tokens table still has a NOT NULL user_id
+        // column (the membership_id-only cleanup migration hasn't been run
+        // against production yet — see
+        // supabase/migrations/20260812140000_memberships_actor_cleanup.sql).
+        // Keep writing it until that migration actually lands.
+        user_id: target.id,
         token_hash: tokenHash,
         token_hint: hint,
         created_by_membership_id: actor.membershipId,
