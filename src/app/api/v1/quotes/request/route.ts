@@ -152,6 +152,7 @@ export async function POST(request: Request) {
     .insert({
       tenant_id: session.tenantId,
       created_by_id: session.userId,
+      created_by_membership_id: session.membershipId ?? null,
       status: "draft",
       title,
       description,

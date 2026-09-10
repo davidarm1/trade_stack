@@ -40,6 +40,7 @@ export async function createReceipt(data: ReceiptInsert) {
     .insert({
       ...data,
       tenant_id: ctx.tenantId,
+      uploaded_by_id: ctx.userId,
       uploaded_by_membership_id: ctx.membershipId,
     })
     .select()
@@ -105,15 +106,18 @@ export async function getReceipts(): Promise<{ data: EnrichedReceipt[] | null; e
   const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
 
   const [uploadersRes, jobsRes] = await Promise.all([
+    // uploaded_by_membership_id is a memberships.id, not a users.id —
+    // look it up in memberships (which already carries a display_name),
+    // not users, or this always misses.
     uploaderIds.length > 0
-      ? supabase.from("users").select("id, name").in("id", uploaderIds)
-      : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null }),
+      ? supabase.from("memberships").select("id, display_name").in("id", uploaderIds)
+      : Promise.resolve({ data: [] as { id: string; display_name: string | null }[], error: null }),
     jobIds.length > 0
       ? supabase.from("jobs").select("id, job_number, title").in("id", jobIds)
       : Promise.resolve({ data: [] as { id: string; job_number: number | null; title: string | null }[], error: null }),
   ]);
 
-  const uploaderMap = new Map((uploadersRes.data ?? []).map((u) => [u.id, u.name]));
+  const uploaderMap = new Map((uploadersRes.data ?? []).map((u) => [u.id, u.display_name]));
   const jobMap = new Map((jobsRes.data ?? []).map((j) => [j.id, { job_number: j.job_number, title: j.title }]));
 
   const enriched: EnrichedReceipt[] = sorted.map((r) => ({

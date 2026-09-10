@@ -21,6 +21,7 @@ export async function createQuote(data: QuoteInsert) {
     ...data,
     tenant_id: ctx.tenantId,
     created_by_id: ctx.userId,
+    created_by_membership_id: ctx.membershipId ?? null,
   };
 
   if (envStatus) {
@@ -122,6 +123,7 @@ export async function convertQuoteToJob(quoteId: string) {
       status: "open",
       source_quote_id: quoteId,
       created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId ?? null,
       job_number: jobNumber,
     })
     .select()

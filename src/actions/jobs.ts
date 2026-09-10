@@ -89,6 +89,7 @@ export async function createJob(data: JobInsert) {
       ...rest,
       tenant_id: ctx.tenantId,
       created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId ?? null,
       job_number: jobNumber,
     })
     .select()
@@ -565,6 +566,7 @@ export async function sendJobInvoice(
     public_url: key,
     is_current: true,
     created_by_id: ctx.userId,
+    created_by_membership_id: ctx.membershipId ?? null,
     created_at: now,
   });
   if (insErr) return { data: null, error: insErr.message };

@@ -504,6 +504,7 @@ async function runReceiptOcrAfterUpload(args: {
 async function processReceiptUploadInBackground(args: {
   tenantId: string;
   userId: string;
+  membershipId: string | null;
   linkedContext: LinkedReceiptContext;
   buf: Buffer;
   key: string;
@@ -516,6 +517,7 @@ async function processReceiptUploadInBackground(args: {
   const {
     tenantId,
     userId,
+    membershipId,
     linkedContext,
     buf,
     key,
@@ -574,6 +576,7 @@ async function processReceiptUploadInBackground(args: {
       job_id: linkedContext.jobId,
       client_id: linkedContext.clientId,
       uploaded_by_id: userId,
+      uploaded_by_membership_id: membershipId,
       receipt_url: key,
       supplier_name: null,
       invoice_date: null,
@@ -630,6 +633,7 @@ async function processReceiptUploadInBackground(args: {
 async function processUploadedObjectInBackground(args: {
   tenantId: string;
   userId: string;
+  membershipId: string | null;
   linkedContext: LinkedReceiptContext;
   key: string;
   url: string;
@@ -637,7 +641,7 @@ async function processUploadedObjectInBackground(args: {
   fileName: string;
   requestedPaymentStatus: PaymentStatusSelection;
 }) {
-  const { tenantId, userId, linkedContext, key, url, mime, fileName, requestedPaymentStatus } = args;
+  const { tenantId, userId, membershipId, linkedContext, key, url, mime, fileName, requestedPaymentStatus } = args;
   const ext = extFromName(fileName);
 
   console.log("[scan-receipt] background finalize starting", {
@@ -688,6 +692,7 @@ async function processUploadedObjectInBackground(args: {
       job_id: linkedContext.jobId,
       client_id: linkedContext.clientId,
       uploaded_by_id: userId,
+      uploaded_by_membership_id: membershipId,
       receipt_url: key,
       supplier_name: null,
       invoice_date: null,
@@ -810,6 +815,7 @@ export async function POST(request: Request) {
       void processUploadedObjectInBackground({
         tenantId: session.tenantId,
         userId: session.userId,
+        membershipId: session.membershipId,
         linkedContext,
         key,
         url: signedUrl,
@@ -877,7 +883,7 @@ export async function POST(request: Request) {
   const fileSha = createHash("sha256").update(buf).digest("hex");
   const key = `tradestack/${session.tenantId}/receipts/${fileSha}_receipt.${ext}`;
   const mime = file.type || mimeForExt(ext);
-  const { supabase, tenantId, userId } = session;
+  const { supabase, tenantId, userId, membershipId } = session;
 
   const { data: existingFile } = await supabase
     .from("tenant_files")
@@ -926,6 +932,7 @@ export async function POST(request: Request) {
     void processReceiptUploadInBackground({
       tenantId,
       userId,
+      membershipId,
       linkedContext,
       buf,
       key,
