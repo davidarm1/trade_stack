@@ -40,6 +40,7 @@ type Props = {
     client_order_number: string | null;
     payment_terms_days: number | null;
     labour_charge: number | null;
+    vat_rate: number | null;
     materials: MaterialRow[];
   };
   addressInitial: {
@@ -89,6 +90,7 @@ export function InvoicePreviewPanel({
       initial.payment_terms_days != null ? String(initial.payment_terms_days) : "",
     labour_charge:
       initial.labour_charge != null ? String(initial.labour_charge) : "",
+    vat_rate: initial.vat_rate != null ? String(initial.vat_rate) : "",
   });
   const [materials, setMaterials] = useState<MaterialRow[]>(
     initial.materials.length > 0
@@ -146,6 +148,7 @@ export function InvoicePreviewPanel({
       client_order_number: fields.client_order_number.trim() || null,
       payment_terms_days: normalized === "" ? null : Number(normalized),
       labour_charge: fields.labour_charge.trim() === "" ? null : Number(fields.labour_charge),
+      vat_rate: fields.vat_rate.trim() === "" ? null : Number(fields.vat_rate),
     });
     setBusy(null);
     if (error) {
@@ -163,7 +166,8 @@ export function InvoicePreviewPanel({
       | "custom_po_number"
       | "client_order_number"
       | "payment_terms_days"
-      | "labour_charge",
+      | "labour_charge"
+      | "vat_rate",
   ) {
     if (busy) return;
     setBusy(key);
@@ -178,6 +182,7 @@ export function InvoicePreviewPanel({
           : Number(fields.payment_terms_days),
       labour_charge:
         fields.labour_charge.trim() === "" ? null : Number(fields.labour_charge),
+      vat_rate: fields.vat_rate.trim() === "" ? null : Number(fields.vat_rate),
     };
     const { error } = await updateJobInvoiceDetails(jobId, payload);
     setBusy(null);
@@ -406,6 +411,20 @@ export function InvoicePreviewPanel({
                   setFields((f) => ({ ...f, labour_charge: e.target.value }))
                 }
                 onBlur={() => void saveField("labour_charge")}
+              />
+            </label>
+            <label className="text-xs text-slate-600">
+              VAT rate (%)
+              <input
+                className={inputCls}
+                type="number"
+                min="0"
+                step="0.01"
+                value={fields.vat_rate}
+                onChange={(e) =>
+                  setFields((f) => ({ ...f, vat_rate: e.target.value }))
+                }
+                onBlur={() => void saveField("vat_rate")}
               />
             </label>
           </div>

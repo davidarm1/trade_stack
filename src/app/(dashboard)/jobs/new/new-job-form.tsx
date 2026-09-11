@@ -153,11 +153,15 @@ export function NewJobForm({
     const form = new FormData(e.currentTarget);
     const title = String(form.get("title") || "");
     const description = String(form.get("description") || "");
+    const job_type = String(form.get("job_type") || "").trim() || null;
     const assigned = String(form.get("assigned_engineer_membership_id") || "");
     const date_onsite = String(form.get("date_onsite") || "") || null;
     const labour = form.get("labour_charge");
     const labour_charge =
       labour != null && String(labour) !== "" ? Number(labour) : null;
+    const vatRateRaw = form.get("vat_rate");
+    const vat_rate =
+      vatRateRaw != null && String(vatRateRaw) !== "" ? Number(vatRateRaw) : null;
 
     let site1 = siteAddress1.trim() || null;
     let site2 = siteAddress2.trim() || null;
@@ -251,6 +255,7 @@ export function NewJobForm({
       client_id: clientId,
       title,
       description,
+      job_type,
       assigned_engineer_membership_id: assigned || null,
       date_onsite,
       site_address1: site1,
@@ -258,6 +263,7 @@ export function NewJobForm({
       site_town: town,
       site_postcode: postcode,
       labour_charge,
+      vat_rate,
       payment_terms_days: pt,
       status: "open",
       custom_po_number: po,
@@ -551,6 +557,17 @@ export function NewJobForm({
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700">
+          Job type
+        </label>
+        <input
+          name="job_type"
+          placeholder="e.g. Drain clearance"
+          defaultValue={prefill?.job_type ?? ""}
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
           Description
         </label>
         <textarea
@@ -688,6 +705,22 @@ export function NewJobForm({
             min="0"
             value={paymentTermsDays}
             onChange={(e) => setPaymentTermsDays(e.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            VAT rate (%)
+          </label>
+          <input
+            name="vat_rate"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Leave blank to use the default"
+            defaultValue={
+              prefill?.vat_rate != null ? String(prefill.vat_rate) : ""
+            }
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>

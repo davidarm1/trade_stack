@@ -69,6 +69,7 @@ export function EditJobForm({
     const { error: updateErr } = await updateJob(initial.id, {
       title,
       description: asNullableText("description"),
+      job_type: asNullableText("job_type"),
       status: asNullableText("status"),
       assigned_engineer_membership_id: asNullableText("assigned_engineer_membership_id"),
       date_onsite: asNullableText("date_onsite"),
@@ -107,6 +108,18 @@ export function EditJobForm({
           name="title"
           required
           defaultValue={initial.title ?? ""}
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Job type
+        </label>
+        <input
+          name="job_type"
+          placeholder="e.g. Drain clearance"
+          defaultValue={initial.job_type ?? ""}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>

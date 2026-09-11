@@ -96,6 +96,17 @@ export async function createJob(data: JobInsert) {
     .single();
 
   if (error) return { data: null, error: error.message };
+
+  // Without this, a job created with just a labour_charge (no materials
+  // added afterward) sits at subtotal/VAT/total £0.00 until something else
+  // happens to trigger a recalc — visibly wrong on the Financial panel and
+  // the invoice.
+  await recalcAndPersistJobTotals({
+    supabase,
+    tenantId: ctx.tenantId,
+    jobId: row.id,
+  });
+
   revalidatePath("/jobs");
   return { data: row, error: null };
 }
@@ -250,6 +261,7 @@ export async function updateJobInvoiceDetails(
     | "client_order_number"
     | "payment_terms_days"
     | "labour_charge"
+    | "vat_rate"
   >,
 ) {
   const ctx = await getTenantContext();

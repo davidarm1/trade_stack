@@ -97,11 +97,13 @@ export default async function Page({
     payment_status?: string | null;
     signature_required?: boolean | null;
     description?: string | null;
+    job_type?: string | null;
     site_address1?: string | null;
     site_address2?: string | null;
     site_town?: string | null;
     site_postcode?: string | null;
     labour_charge?: number | null;
+    vat_rate?: number | null;
     total_materials?: number | null;
     subtotal?: number | null;
     vat_amount?: number | null;
@@ -254,6 +256,12 @@ export default async function Page({
                   >
                     {legacy}
                   </dd>
+                </div>
+              ) : null}
+              {j.job_type ? (
+                <div>
+                  <dt className="text-slate-500">Job type</dt>
+                  <dd className="text-slate-900">{j.job_type}</dd>
                 </div>
               ) : null}
               <div>
@@ -445,6 +453,8 @@ export default async function Page({
                 : null,
             labour_charge:
               typeof j.labour_charge === "number" ? j.labour_charge : null,
+            vat_rate:
+              typeof j.vat_rate === "number" ? j.vat_rate : null,
             materials: materials.map(
               (m: {
                 description?: string | null;

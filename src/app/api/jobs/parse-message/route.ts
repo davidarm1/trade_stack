@@ -11,17 +11,19 @@ import type { JobAiPrefill } from "@/types/job-ai-prefill";
 
 export const runtime = "nodejs";
 
-const SYSTEM = `You extract structured job data from informal client messages (email, SMS, WhatsApp) for a UK trades / field-service business.
+const SYSTEM = `You extract structured job data from client messages for a UK trades / field-service business — this can be informal (email, SMS, WhatsApp) or a formal purchase order / work-order document with labelled fields.
 Return ONLY a JSON object (no markdown fences) with these keys. Use null for anything unknown or not stated.
 
 - title: short job title (string, required if any work is described)
-- description: fuller scope / notes (string, may be empty)
+- description: the scope of work only — if the message has an explicit "Job description:" (or "Scope of work:", "Details:") line or sentence, use exactly that; otherwise a short plain-English summary of the work requested. Do NOT copy the whole message, and do NOT repeat customer/site address or pricing details that are already captured in other fields below.
+- job_type: short category of work if the message labels one (e.g. a "Job type:" line) — a few words like "Drain clearance", else null
 - customer_type: "domestic" if this looks like a homeowner/private person, "business" if it looks like a company/commercial customer
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
-- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide; null only if there is not enough information to make a reasonable estimate
+- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide; if the message states an explicit price excluding VAT for the job, use that instead; null only if there is not enough information to make a reasonable estimate
+- vat_rate: VAT percentage as a plain number (e.g. 20 for 20%) only if explicitly stated in the message; else null
 - payment_terms_days: 0 for domestic/private homeowner work; 30 for business/commercial work unless the message or tenant guide says otherwise
-- custom_po_number, legacy_ref: strings or null
+- custom_po_number, legacy_ref: strings or null — custom_po_number is an actual PO/order reference number if one is given, not just the customer's name
 - new_company_name: company name if a business is identifiable; otherwise use the person's/customer's name
 - new_contact_name, new_contact_email, new_contact_number: strings or null
 - new_address1, new_address2, new_town, new_postcode: client billing address if given, else empty string or null
@@ -124,15 +126,44 @@ function extractAddressParts(text: string): {
   return { address1, town, postcode };
 }
 
+/** Grabs the value after a "Label:" line, e.g. "Job description: Attend site to clear drains." */
+function extractLabelledLine(text: string, labels: string[]): string | undefined {
+  for (const label of labels) {
+    const re = new RegExp(`\\b${label}\\s*:\\s*([^\\n]+)`, "iu");
+    const value = text.match(re)?.[1]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function extractVatRatePercent(text: string): number | undefined {
+  const match = text.match(/\bVAT\s*rate\s*:?\s*(\d+(?:\.\d+)?)\s*%/iu);
+  const n = match ? Number(match[1]) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill {
   const contactName = prefill.new_contact_name ?? extractCustomerName(sourceText);
   const phone = prefill.new_contact_number ?? extractPhone(sourceText);
   const address = extractAddressParts(sourceText);
-  const description = prefill.description?.trim() || sourceText;
+  // If the model didn't return a description, try to pull the explicit
+  // labelled line from the message before falling back to dumping the
+  // entire raw message in — a formal PO-style message already has this
+  // info duplicated across the structured fields below, so repeating all
+  // of it in description too is redundant and confusing on the job sheet.
+  const description =
+    prefill.description?.trim() ||
+    extractLabelledLine(sourceText, ["Job description", "Scope of work", "Details"]) ||
+    sourceText;
+  const jobType =
+    prefill.job_type?.trim() || extractLabelledLine(sourceText, ["Job type"]) || undefined;
+  const vatRate = prefill.vat_rate ?? extractVatRatePercent(sourceText) ?? undefined;
 
   return {
     ...prefill,
     description,
+    job_type: jobType ?? null,
+    vat_rate: vatRate ?? null,
     new_company_name: prefill.new_company_name ?? contactName,
     new_contact_name: contactName,
     new_contact_number: phone,
@@ -165,12 +196,14 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
   const prefill: JobAiPrefill = {
     title: str(obj.title).trim() || undefined,
     description: str(obj.description).trim() || undefined,
+    job_type: strOrNull(obj.job_type),
     date_onsite: strOrNull(obj.date_onsite),
     site_address1: site1.trim() || undefined,
     site_address2: site2.trim() || undefined,
     site_town: siteTown.trim() || undefined,
     site_postcode: sitePc.trim() || undefined,
     labour_charge: numOrNull(obj.labour_charge),
+    vat_rate: numOrNull(obj.vat_rate),
     payment_terms_days: paymentTerms,
     custom_po_number: strOrNull(obj.custom_po_number) ?? undefined,
     legacy_ref: strOrNull(obj.legacy_ref) ?? undefined,
