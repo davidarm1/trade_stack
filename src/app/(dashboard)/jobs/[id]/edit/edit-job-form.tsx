@@ -14,6 +14,7 @@ type EditJobInitial = {
   status: string | null;
   assigned_engineer_membership_id: string | null;
   date_onsite: string | null;
+  time_onsite: string | null;
   site_address1: string | null;
   site_address2: string | null;
   site_town: string | null;
@@ -73,6 +74,7 @@ export function EditJobForm({
       status: asNullableText("status"),
       assigned_engineer_membership_id: asNullableText("assigned_engineer_membership_id"),
       date_onsite: asNullableText("date_onsite"),
+      time_onsite: asNullableText("time_onsite"),
       site_address1: asNullableText("site_address1"),
       site_address2: asNullableText("site_address2"),
       site_town: asNullableText("site_town"),
@@ -194,6 +196,17 @@ export function EditJobForm({
             name="date_onsite"
             type="date"
             defaultValue={initial.date_onsite ?? ""}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Time onsite
+          </label>
+          <input
+            name="time_onsite"
+            placeholder="e.g. 2pm, or 9-11am"
+            defaultValue={initial.time_onsite ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>

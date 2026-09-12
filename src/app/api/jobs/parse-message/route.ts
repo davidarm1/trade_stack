@@ -19,6 +19,7 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 - job_type: short category of work if the message labels one (e.g. a "Job type:" line) — a few words like "Drain clearance", else null
 - customer_type: "domestic" if this looks like a homeowner/private person, "business" if it looks like a company/commercial customer
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
+- time_onsite: a time or time window if one is mentioned (e.g. "2pm", "morning", "9-11am"), as plain text, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
 - labour_charge: estimated labour/visit charge as one number using the tenant pricing guide; if the message states an explicit price excluding VAT for the job, use that instead; null only if there is not enough information to make a reasonable estimate
 - vat_rate: VAT percentage as a plain number (e.g. 20 for 20%) only if explicitly stated in the message; else null
@@ -198,6 +199,7 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
     description: str(obj.description).trim() || undefined,
     job_type: strOrNull(obj.job_type),
     date_onsite: strOrNull(obj.date_onsite),
+    time_onsite: strOrNull(obj.time_onsite),
     site_address1: site1.trim() || undefined,
     site_address2: site2.trim() || undefined,
     site_town: siteTown.trim() || undefined,

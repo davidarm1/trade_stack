@@ -156,6 +156,7 @@ export function NewJobForm({
     const job_type = String(form.get("job_type") || "").trim() || null;
     const assigned = String(form.get("assigned_engineer_membership_id") || "");
     const date_onsite = String(form.get("date_onsite") || "") || null;
+    const time_onsite = String(form.get("time_onsite") || "").trim() || null;
     const labour = form.get("labour_charge");
     const labour_charge =
       labour != null && String(labour) !== "" ? Number(labour) : null;
@@ -258,6 +259,7 @@ export function NewJobForm({
       job_type,
       assigned_engineer_membership_id: assigned || null,
       date_onsite,
+      time_onsite,
       site_address1: site1,
       site_address2: site2,
       site_town: town,
@@ -602,6 +604,17 @@ export function NewJobForm({
           name="date_onsite"
           type="date"
           defaultValue={prefill?.date_onsite ?? ""}
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Time onsite
+        </label>
+        <input
+          name="time_onsite"
+          placeholder="e.g. 2pm, or 9-11am"
+          defaultValue={prefill?.time_onsite ?? ""}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>

@@ -13,6 +13,7 @@ import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
 import { JobDetailActions } from "./job-detail-actions";
 import { ClientNameEditor } from "./client-name-editor";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
+import { JobDetailsEditor } from "./job-details-editor";
 
 const CURRENCY_TO_LOCALE: Record<string, string> = {
   GBP: "en-GB",
@@ -290,6 +291,19 @@ export default async function Page({
             <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap">
               {String(j.description ?? "")}
             </p>
+            <div className="mt-3">
+              <JobDetailsEditor
+                jobId={j.id}
+                initial={{
+                  title: titleStr,
+                  job_type: String(j.job_type ?? ""),
+                  description: String(j.description ?? ""),
+                  date_onsite:
+                    typeof j.date_onsite === "string" ? j.date_onsite : "",
+                  time_onsite: String(j.time_onsite ?? ""),
+                }}
+              />
+            </div>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
