@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { getAssignableEngineers } from "@/actions/team";
+import { getCurrentTenantLabourLabel } from "@/actions/settings";
 import { NewJobEntry } from "./new-job-entry";
 
 export default async function NewJobPage() {
-  const engineerRes = await getAssignableEngineers();
+  const [engineerRes, labourLabel] = await Promise.all([
+    getAssignableEngineers(),
+    getCurrentTenantLabourLabel(),
+  ]);
 
   if (engineerRes.error) {
     return (
@@ -28,7 +32,7 @@ export default async function NewJobPage() {
         Add a job for a client — enter details yourself, or paste a client message
         to parse with OpenAI (set OPENAI_API_KEY for the app server).
       </p>
-      <NewJobEntry engineers={engineers} />
+      <NewJobEntry engineers={engineers} labourLabel={labourLabel} />
     </div>
   );
 }

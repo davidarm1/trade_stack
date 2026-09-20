@@ -14,6 +14,11 @@ import {
   BRANDING_USE_LOGO_LEGACY_KEY,
   resolveBrandingFromSettings,
 } from "@/lib/branding-settings";
+import {
+  DEFAULT_LABOUR_LABEL,
+  LABOUR_LABEL_SETTING_KEY,
+  resolveLabourLabel,
+} from "@/lib/labour-label";
 import type { Tenant } from "@/types/database";
 
 const CURRENCY_OPTIONS: { value: string; label: string }[] = [
@@ -192,8 +197,21 @@ export function SettingsForm({
       bank_swift: String(form.get("bank_swift") ?? "").trim() || null,
     });
 
+    if (err) {
+      setPending(false);
+      setError(err);
+      return;
+    }
+
+    const labourLabel =
+      String(form.get("labour_label") ?? "").trim() || DEFAULT_LABOUR_LABEL;
+    const { error: labourErr } = await upsertSettingValue(
+      LABOUR_LABEL_SETTING_KEY,
+      labourLabel,
+    );
+
     setPending(false);
-    if (err) setError(err);
+    if (labourErr) setError(labourErr);
     else router.refresh();
   }
 
@@ -345,6 +363,22 @@ export function SettingsForm({
                 VAT is off for this company. Turn VAT registered back on to charge VAT on new invoices.
               </p>
             ) : null}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              What do you call billable work?
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              Used across job sheets, invoices, and job forms — e.g. &ldquo;Materials &amp;
+              Labour&rdquo; becomes &ldquo;Materials &amp; Services&rdquo; if you change this to
+              &ldquo;Services&rdquo;. Defaults to &ldquo;Labour&rdquo;.
+            </p>
+            <input
+              name="labour_label"
+              defaultValue={resolveLabourLabel(keyValues[LABOUR_LABEL_SETTING_KEY])}
+              placeholder={DEFAULT_LABOUR_LABEL}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Default payment terms (days)</label>

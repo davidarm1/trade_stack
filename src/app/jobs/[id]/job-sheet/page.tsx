@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
+import { resolveLabourLabel } from "@/lib/labour-label";
 import { createClient } from "@/lib/supabase/server";
 import { formatJobRefFormal } from "@/lib/job-number";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
@@ -69,6 +70,7 @@ export default async function JobSheetStandalonePage({
   );
 
   const { showLogo, showName } = resolveBrandingFromSettings(settings);
+  const labourLabel = resolveLabourLabel(settings.labour_label);
   const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
   const companyName = opt(settings.company_name) ?? opt(tenant?.name);
 
@@ -128,6 +130,7 @@ export default async function JobSheetStandalonePage({
       <JobSheetView
         embed={isEmbed}
         jobRef={jobRef}
+        labourLabel={labourLabel}
         companyName={companyName}
         companyDetailLines={companyDetailLines}
         companyLogoUrl={companyLogoUrl}

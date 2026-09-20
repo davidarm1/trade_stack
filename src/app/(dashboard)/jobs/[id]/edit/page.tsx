@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob } from "@/actions/jobs";
 import { getAssignableEngineers } from "@/actions/team";
+import { getCurrentTenantLabourLabel } from "@/actions/settings";
 import { EditJobForm } from "./edit-job-form";
 
 export default async function EditJobPage({
@@ -10,7 +11,11 @@ export default async function EditJobPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [jobRes, engineerRes] = await Promise.all([getJob(id), getAssignableEngineers()]);
+  const [jobRes, engineerRes, labourLabel] = await Promise.all([
+    getJob(id),
+    getAssignableEngineers(),
+    getCurrentTenantLabourLabel(),
+  ]);
 
   if (jobRes.error || !jobRes.data) notFound();
   if (engineerRes.error) {
@@ -80,6 +85,7 @@ export default async function EditJobPage({
           signature_required: job.signature_required,
         }}
         engineers={engineers}
+        labourLabel={labourLabel}
       />
     </div>
   );

@@ -38,9 +38,11 @@ const STATUS_OPTIONS = [
 export function EditJobForm({
   initial,
   engineers,
+  labourLabel,
 }: {
   initial: EditJobInitial;
   engineers: EngineerOption[];
+  labourLabel: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -242,7 +244,7 @@ export function EditJobForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Labour charge
+            {labourLabel} charge
           </label>
           <input
             name="labour_charge"

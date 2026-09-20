@@ -20,6 +20,7 @@ type MaterialRow = {
 
 type Props = {
   jobId: string;
+  labourLabel: string;
   currentInvoiceUrl: string | null;
   currentJobSheetUrl: string | null;
   invoiceVersions: Array<{
@@ -65,6 +66,7 @@ const inputCls =
 
 export function InvoicePreviewPanel({
   jobId,
+  labourLabel,
   currentInvoiceUrl,
   currentJobSheetUrl,
   invoiceVersions,
@@ -400,7 +402,7 @@ export function InvoicePreviewPanel({
               </select>
             </label>
             <label className="text-xs text-slate-600 sm:col-span-2">
-              Labour charge
+              {labourLabel} charge
               <input
                 className={inputCls}
                 type="number"

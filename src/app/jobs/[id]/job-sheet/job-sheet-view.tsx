@@ -3,6 +3,7 @@
 export type JobSheetViewProps = {
   embed?: boolean;
   jobRef: string;
+  labourLabel: string;
   companyName: string | null;
   companyDetailLines: string[];
   companyLogoUrl: string | null;
@@ -45,6 +46,7 @@ export function JobSheetView(props: JobSheetViewProps) {
   const {
     embed,
     jobRef,
+    labourLabel,
     companyName,
     companyDetailLines,
     companyLogoUrl,
@@ -192,7 +194,7 @@ export function JobSheetView(props: JobSheetViewProps) {
 
         {/* ── Materials & labour table ── */}
         <section className="mt-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-[#1a2e4a]">Materials &amp; Labour</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-[#1a2e4a]">Materials &amp; {labourLabel}</h2>
           <div className="mt-1 h-px bg-slate-200" />
           <table className="mt-2 w-full border-collapse text-sm">
             <thead>
@@ -231,7 +233,7 @@ export function JobSheetView(props: JobSheetViewProps) {
           </table>
           {hasFinancials ? (
             <div className="mt-2 flex gap-6 text-sm font-semibold text-[#1a2e4a]">
-              {labourCharge != null ? <span>Labour: {fmt(labourCharge)}</span> : null}
+              {labourCharge != null ? <span>{labourLabel}: {fmt(labourCharge)}</span> : null}
               {totalMaterials != null ? <span>Materials: {fmt(totalMaterials)}</span> : null}
             </div>
           ) : null}

@@ -9,7 +9,13 @@ type UserOpt = { id: string; name: string | null };
 
 type EntryMode = "manual" | "ai";
 
-export function NewJobEntry({ engineers }: { engineers: UserOpt[] }) {
+export function NewJobEntry({
+  engineers,
+  labourLabel,
+}: {
+  engineers: UserOpt[];
+  labourLabel: string;
+}) {
   const [mode, setMode] = useState<EntryMode>("manual");
   const [aiPrefill, setAiPrefill] = useState<JobAiPrefill | null>(null);
   const [formKey, setFormKey] = useState(0);
@@ -83,6 +89,7 @@ export function NewJobEntry({ engineers }: { engineers: UserOpt[] }) {
           key={formKey}
           engineers={engineers}
           prefill={aiPrefill}
+          labourLabel={labourLabel}
         />
       </div>
 

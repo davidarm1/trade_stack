@@ -7,6 +7,7 @@ import {
 import { uploadToB2, getSignedDownloadUrl } from "@/lib/b2";
 import { normalizeB2ObjectKey } from "@/lib/b2-links";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
+import { resolveLabourLabel } from "@/lib/labour-label";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
 import { formatJobRefFormal } from "@/lib/job-number";
 import type { createClient } from "@/lib/supabase/server";
@@ -151,6 +152,7 @@ async function buildJobSheetPdf(args: {
   const settings = Object.fromEntries(
     (settingRows ?? []).map((r) => [String(r.field_key), String(r.field_value ?? "")]),
   );
+  const labourLabel = resolveLabourLabel(settings.labour_label);
   const companyName = opt(settings.company_name) ?? opt(tenant?.name);
   const companyPhone = opt(settings.phone) ?? opt(tenant?.phone);
   const companyEmail = opt(settings.email) ?? opt(tenant?.email);
@@ -389,7 +391,7 @@ async function buildJobSheetPdf(args: {
 
   // ── Materials & labour table ──────────────────────────────────────────────
   ensureSpace(80);
-  page.drawText("MATERIALS & LABOUR", { x: MARGIN, y, size: 9, font: bold, color: NAVY });
+  page.drawText(`MATERIALS & ${labourLabel.toUpperCase()}`, { x: MARGIN, y, size: 9, font: bold, color: NAVY });
   y -= 11;
   page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: BORDER });
   y -= 2;
@@ -435,7 +437,7 @@ async function buildJobSheetPdf(args: {
 
   // Totals row below table
   y -= 10;
-  const labourStr   = job.labour_charge   != null ? `Labour: ${String(job.labour_charge)}`        : null;
+  const labourStr   = job.labour_charge   != null ? `${labourLabel}: ${String(job.labour_charge)}` : null;
   const materialsStr = job.total_materials != null ? `Materials: ${String(job.total_materials)}` : null;
   const totalsLine  = [labourStr, materialsStr].filter(Boolean).join("   ");
   if (totalsLine) {

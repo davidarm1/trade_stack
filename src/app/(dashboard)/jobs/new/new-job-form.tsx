@@ -45,9 +45,11 @@ function matchEngineerId(
 export function NewJobForm({
   engineers,
   prefill = null,
+  labourLabel,
 }: {
   engineers: UserOpt[];
   prefill?: JobAiPrefill | null;
+  labourLabel: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -688,7 +690,7 @@ export function NewJobForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Labour charge
+            {labourLabel} charge
           </label>
           <input
             name="labour_charge"

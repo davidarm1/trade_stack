@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob, getJobInvoiceVersions } from "@/actions/jobs";
 import { getAssignableEngineers } from "@/actions/team";
+import { getCurrentTenantLabourLabel } from "@/actions/settings";
 import { formatCurrency } from "@/lib/format-currency";
 import { getTenantCurrencyCode } from "@/lib/tenant-currency";
 import {
@@ -73,10 +74,11 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [{ data, error }, engineerRes, invoiceVersionsRes] = await Promise.all([
+  const [{ data, error }, engineerRes, invoiceVersionsRes, labourLabel] = await Promise.all([
     getJob(id),
     getAssignableEngineers(),
     getJobInvoiceVersions(id),
+    getCurrentTenantLabourLabel(),
   ]);
   const invoiceVersions = invoiceVersionsRes.data ?? [];
   const currentInvoiceVersion = invoiceVersions.find((v) => v.is_current) ?? null;
@@ -349,7 +351,7 @@ export default async function Page({
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Labour charge</dt>
+                <dt className="text-slate-500">{labourLabel} charge</dt>
                 <dd className="text-slate-900">{money(j.labour_charge)}</dd>
               </div>
               <div>
@@ -443,6 +445,7 @@ export default async function Page({
 
         <InvoicePreviewPanel
           jobId={j.id}
+          labourLabel={labourLabel}
           currentInvoiceUrl={b2DownloadPathFromStoredValue(currentInvoiceVersion?.public_url)}
           currentJobSheetUrl={b2DownloadPathFromStoredValue(j.jobsheet_url)}
           invoiceVersions={invoiceVersions}

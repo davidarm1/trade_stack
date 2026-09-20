@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/tenant";
 import { revalidatePath } from "next/cache";
 import type { Tenant } from "@/types/database";
+import { getLabourLabel } from "@/lib/labour-label";
 
 type TenantUpdate = Partial<
   Omit<Tenant, "id" | "created_at" | "updated_at" | "slug">
@@ -56,6 +57,14 @@ export async function updateSettings(data: TenantUpdate) {
   revalidatePath("/receipts");
   revalidatePath("/", "layout");
   return { data: row, error: null };
+}
+
+/** "Labour" unless the tenant has customised it (e.g. to "Services") in Settings. */
+export async function getCurrentTenantLabourLabel(): Promise<string> {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return "Labour";
+  const supabase = await createClient();
+  return getLabourLabel(supabase, ctx.tenantId);
 }
 
 export async function getSettingValue(fieldKey: string) {
