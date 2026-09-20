@@ -7,7 +7,7 @@ import {
   QUOTES_AI_PRICING_PROMPT_DEFAULT,
   QUOTES_AI_PRICING_PROMPT_KEY,
 } from "@/lib/quotes-ai-pricing-prompt";
-import type { JobAiPrefill } from "@/types/job-ai-prefill";
+import type { JobAiPrefill, JobAiPrefillMaterial } from "@/types/job-ai-prefill";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,8 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - time_onsite: a time or time window if one is mentioned (e.g. "2pm", "morning", "9-11am"), as plain text, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
-- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide; if the message states an explicit price excluding VAT for the job, use that instead; null only if there is not enough information to make a reasonable estimate
+- materials: an array of itemised billable lines ONLY if the message actually breaks the work into distinct priced items (e.g. a numbered list, separate services, or a table of charges) — each item is {"description": string, "quantity": number (default 1), "unit_price": number or null}. Use the price given for that specific item; if an item's price genuinely isn't stated, still include it with unit_price null rather than dropping it, so the office can price it manually. If the message has no such breakdown (just one overall job with one price, or no price at all), return an empty array here and use labour_charge instead — never populate both for the same work, that would double the total.
+- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide, ONLY when materials above is empty; if the message states an explicit price excluding VAT for the job (and materials is empty), use that instead; null if materials has entries, or if there is not enough information to make a reasonable estimate
 - vat_rate: VAT percentage as a plain number (e.g. 20 for 20%) only if explicitly stated in the message; else null
 - payment_terms_days: 0 for domestic/private homeowner work; 30 for business/commercial work unless the message or tenant guide says otherwise
 - custom_po_number, legacy_ref: strings or null — custom_po_number is an actual PO/order reference number if one is given, not just the customer's name
@@ -260,7 +261,14 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
     extractLabelledLine(sourceText, ["Job description", "Scope of work", "Details"]) ||
     sourceText;
   const vatRate = prefill.vat_rate ?? extractVatRatePercent(sourceText) ?? undefined;
-  const labourCharge = prefill.labour_charge ?? extractPriceExVat(sourceText) ?? undefined;
+  // Only fall back to a flat price when there's no itemised breakdown —
+  // materials already being populated means labour_charge is deliberately
+  // null (see toPrefill), and the regex backstop must not undo that and
+  // double-count the same work.
+  const hasMaterials = (prefill.materials?.length ?? 0) > 0;
+  const labourCharge = hasMaterials
+    ? null
+    : prefill.labour_charge ?? extractPriceExVat(sourceText) ?? undefined;
 
   return {
     ...prefill,
@@ -294,7 +302,22 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
   };
 }
 
+function toMaterials(v: unknown): JobAiPrefillMaterial[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((raw) => {
+      if (typeof raw !== "object" || raw === null) return null;
+      const item = raw as Record<string, unknown>;
+      const description = str(item.description).trim();
+      if (!description) return null;
+      const quantity = numOrNull(item.quantity) ?? 1;
+      return { description, quantity, unit_price: numOrNull(item.unit_price) };
+    })
+    .filter((v): v is JobAiPrefillMaterial => v !== null);
+}
+
 function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
+  const materials = toMaterials(obj.materials);
   const site1 = str(obj.site_address1);
   const site2 = str(obj.site_address2);
   const siteTown = str(obj.site_town);
@@ -315,7 +338,10 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
     site_address2: site2.trim() || undefined,
     site_town: siteTown.trim() || undefined,
     site_postcode: sitePc.trim() || undefined,
-    labour_charge: numOrNull(obj.labour_charge),
+    // Never both — an itemised breakdown and a flat labour charge would
+    // double-count the same work in the total.
+    materials: materials.length > 0 ? materials : undefined,
+    labour_charge: materials.length > 0 ? null : numOrNull(obj.labour_charge),
     vat_rate: numOrNull(obj.vat_rate),
     payment_terms_days: paymentTerms,
     custom_po_number: strOrNull(obj.custom_po_number) ?? undefined,

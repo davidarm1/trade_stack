@@ -1,3 +1,10 @@
+export type JobAiPrefillMaterial = {
+  description: string;
+  quantity: number;
+  /** null when the model couldn't tell — left blank for the user to price. */
+  unit_price: number | null;
+};
+
 /** Draft job + optional new-client fields returned from AI message parsing. */
 export type JobAiPrefill = {
   title?: string;
@@ -9,6 +16,8 @@ export type JobAiPrefill = {
   site_town?: string;
   site_postcode?: string;
   labour_charge?: number | null;
+  /** Itemised billable lines when the message breaks work into distinct items. */
+  materials?: JobAiPrefillMaterial[];
   vat_rate?: number | null;
   payment_terms_days?: number | null;
   custom_po_number?: string;

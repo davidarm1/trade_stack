@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient, searchClients } from "@/actions/clients";
-import { createJob } from "@/actions/jobs";
+import { createJob, replaceJobInvoiceMaterials } from "@/actions/jobs";
 import type { Client } from "@/types/database";
 import type { JobAiPrefill } from "@/types/job-ai-prefill";
 import { DEFAULT_JOB_TYPE } from "@/lib/job-type-options";
@@ -85,6 +85,16 @@ export function NewJobForm({
     prefill?.payment_terms_days != null
       ? String(prefill.payment_terms_days)
       : "",
+  );
+  const [materials, setMaterials] = useState(() =>
+    (prefill?.materials ?? []).map((m) => ({
+      description: m.description,
+      quantity: String(m.quantity ?? 1),
+      // Blank (not "0") when the AI couldn't tell the price — makes it
+      // visually obvious which lines still need pricing, rather than
+      // looking like a genuine £0.00 item.
+      unit_price: m.unit_price != null ? String(m.unit_price) : "",
+    })),
   );
 
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -278,11 +288,33 @@ export function NewJobForm({
       legacy_ref: legacyRef,
     });
 
-    setPending(false);
     if (err || !data) {
+      setPending(false);
       setError(err ?? "Could not create job");
       return;
     }
+
+    const materialRows = materials
+      .map((m) => ({
+        description: m.description.trim(),
+        quantity: m.quantity.trim() === "" ? 1 : Number(m.quantity),
+        unit_price: m.unit_price.trim() === "" ? 0 : Number(m.unit_price),
+      }))
+      .filter((m) => m.description);
+    if (materialRows.length > 0) {
+      const { error: materialsErr } = await replaceJobInvoiceMaterials(
+        data.id,
+        materialRows,
+      );
+      if (materialsErr) {
+        // The job itself was created fine — don't block navigation over
+        // this, but leave a trail since the office won't otherwise know
+        // the line items didn't save.
+        console.error("Could not save job line items:", materialsErr);
+      }
+    }
+
+    setPending(false);
     router.push(`/jobs/${data.id}`);
     router.refresh();
   }
@@ -732,6 +764,86 @@ export function NewJobForm({
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Line items ({labourLabel.toLowerCase()} & materials)
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          Optional — use this instead of a single {labourLabel.toLowerCase()} charge above
+          when the job breaks down into separate priced items. Leave unit price blank for
+          anything you still need to price yourself.
+        </p>
+        <div className="mt-2 space-y-2">
+          {materials.map((m, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-2">
+              <input
+                className="col-span-6 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                placeholder="Item"
+                value={m.description}
+                onChange={(e) =>
+                  setMaterials((list) =>
+                    list.map((row, i) =>
+                      i === idx ? { ...row, description: e.target.value } : row,
+                    ),
+                  )
+                }
+              />
+              <input
+                className="col-span-2 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                placeholder="Qty"
+                type="number"
+                min="0"
+                step="0.01"
+                value={m.quantity}
+                onChange={(e) =>
+                  setMaterials((list) =>
+                    list.map((row, i) =>
+                      i === idx ? { ...row, quantity: e.target.value } : row,
+                    ),
+                  )
+                }
+              />
+              <input
+                className="col-span-3 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                placeholder="Unit price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={m.unit_price}
+                onChange={(e) =>
+                  setMaterials((list) =>
+                    list.map((row, i) =>
+                      i === idx ? { ...row, unit_price: e.target.value } : row,
+                    ),
+                  )
+                }
+              />
+              <button
+                type="button"
+                className="col-span-1 rounded-md border border-red-200 bg-white px-2 text-red-700 hover:bg-red-50"
+                onClick={() =>
+                  setMaterials((list) => list.filter((_, i) => i !== idx))
+                }
+                title="Remove line"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="mt-2 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+          onClick={() =>
+            setMaterials((list) => [
+              ...list,
+              { description: "", quantity: "1", unit_price: "" },
+            ])
+          }
+        >
+          + Add line
+        </button>
       </div>
       {error && (
         <p className="text-sm text-red-600" role="alert">
