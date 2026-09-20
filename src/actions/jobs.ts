@@ -64,6 +64,27 @@ export async function allocateNextJobNumber(): Promise<{
   return { jobNumber: n, error: null };
 }
 
+/**
+ * jobs.vat_rate is NOT NULL — it can't be left blank the way job_type could
+ * be hidden entirely, since a VAT rate is genuinely per-job data. When a
+ * form leaves it blank we still need a concrete number to insert/update,
+ * so resolve the tenant's own configured default (0 if not VAT registered,
+ * mirroring the same rule the invoice PDF already uses to decide whether
+ * to charge VAT at all) rather than inventing an arbitrary figure.
+ */
+async function resolveDefaultVatRate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+): Promise<number> {
+  const { data: tenantRow } = await supabase
+    .from("tenants")
+    .select("vat_number, default_vat_rate")
+    .eq("id", tenantId)
+    .maybeSingle();
+  const vatRegistered = Boolean(String(tenantRow?.vat_number ?? "").trim());
+  return vatRegistered ? Number(tenantRow?.default_vat_rate ?? 0) || 0 : 0;
+}
+
 export async function createJob(data: JobInsert) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
@@ -83,10 +104,14 @@ export async function createJob(data: JobInsert) {
     return { data: null, error: allocErr ?? "Could not allocate job number" };
   }
 
+  const vat_rate =
+    rest.vat_rate ?? (await resolveDefaultVatRate(supabase, ctx.tenantId));
+
   const { data: row, error } = await supabase
     .from("jobs")
     .insert({
       ...rest,
+      vat_rate,
       tenant_id: ctx.tenantId,
       created_by_id: ctx.userId,
       created_by_membership_id: ctx.membershipId ?? null,
@@ -268,9 +293,17 @@ export async function updateJobInvoiceDetails(
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
+  // vat_rate is NOT NULL — clearing the field back to blank in the editor
+  // must resolve to the tenant default, not send null and violate the
+  // constraint.
+  const patch =
+    "vat_rate" in data && data.vat_rate == null
+      ? { ...data, vat_rate: await resolveDefaultVatRate(supabase, ctx.tenantId) }
+      : data;
+
   const { data: row, error } = await supabase
     .from("jobs")
-    .update({ ...data, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("tenant_id", ctx.tenantId)
     .select()
@@ -282,7 +315,7 @@ export async function updateJobInvoiceDetails(
     supabase,
     tenantId: ctx.tenantId,
     jobId: id,
-    labourChargeOverride: data.labour_charge ?? null,
+    labourChargeOverride: patch.labour_charge ?? null,
   });
 
   revalidatePath("/jobs");
