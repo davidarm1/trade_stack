@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { JobAiPrefill } from "@/types/job-ai-prefill";
 
 type Props = {
@@ -53,6 +54,14 @@ export function NewJobAiPanel({ onParsed }: Props) {
           When a client emails or texts job details, paste the full message
           here. We will send it to OpenAI and map the reply into the job form
           (review before saving).
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Prices are only guessed where the message doesn&apos;t state one —
+          set up rates in the{" "}
+          <Link href="/settings" className="underline hover:text-slate-700">
+            AI pricing guide in Settings
+          </Link>{" "}
+          so it can price known job/service types itself.
         </p>
         <label htmlFor="job-ai-raw" className="sr-only">
           Pasted email or text

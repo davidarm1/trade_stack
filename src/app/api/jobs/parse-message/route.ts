@@ -20,8 +20,8 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - time_onsite: a time or time window if one is mentioned (e.g. "2pm", "morning", "9-11am"), as plain text, else null
 - site_address1, site_address2, site_town, site_postcode: work site (strings, empty if unknown)
-- materials: an array of itemised billable lines ONLY if the message actually breaks the work into distinct priced items (e.g. a numbered list, separate services, or a table of charges) — each item is {"description": string, "quantity": number (default 1), "unit_price": number or null}. Use the price given for that specific item; if an item's price genuinely isn't stated, still include it with unit_price null rather than dropping it, so the office can price it manually. If the message has no such breakdown (just one overall job with one price, or no price at all), return an empty array here and use labour_charge instead — never populate both for the same work, that would double the total.
-- labour_charge: estimated labour/visit charge as one number using the tenant pricing guide, ONLY when materials above is empty; if the message states an explicit price excluding VAT for the job (and materials is empty), use that instead; null if materials has entries, or if there is not enough information to make a reasonable estimate
+- materials: an array of itemised billable lines whenever the message describes more than one distinguishable task, service, or product — this is about the WORK, not whether prices happen to be given per item. Each item is {"description": string, "quantity": number (default 1), "unit_price": number or null}. Price each item in this order of preference: (1) an explicit price stated for that specific item in the message, (2) a matching rate from the tenant pricing guide below (e.g. the guide says "Drain clearing £150/hr" and this item is drain clearing), (3) otherwise unit_price: null — never invent a figure with no basis in the message or the guide, that's the office's job to fill in. If the message describes only ONE undivided task with no natural breakdown, return an empty array here and use labour_charge instead — never populate both for the same work, that would double the total.
+- labour_charge: estimated labour/visit charge as one number, using the tenant pricing guide if it has a matching rate, ONLY when materials above is empty (i.e. the message describes a single undivided task); if the message states an explicit price excluding VAT for that one task (and materials is empty), use that instead; null if materials has entries, or if there is not enough information to make a reasonable estimate
 - vat_rate: VAT percentage as a plain number (e.g. 20 for 20%) only if explicitly stated in the message; else null
 - payment_terms_days: 0 for domestic/private homeowner work; 30 for business/commercial work unless the message or tenant guide says otherwise
 - custom_po_number, legacy_ref: strings or null — custom_po_number is an actual PO/order reference number if one is given, not just the customer's name
@@ -35,7 +35,7 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 
 If only a site address is given but it is clearly also the client premises, copy into new_* billing fields where appropriate.
 Prefer UK date formats when inferring date_onsite.
-The user message includes "--- Tenant pricing / business rules ---" with this tenant's guide. Use it to estimate labour_charge for the job.`;
+The user message includes "--- Tenant pricing / business rules ---" with this tenant's guide (e.g. rates per service type). Use it to price materials items and/or labour_charge as described above — a rate in the guide takes priority over your own estimate, but never over a price actually stated in the message.`;
 
 function stripJsonFence(raw: string): string {
   let t = raw.trim();

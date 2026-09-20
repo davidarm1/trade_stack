@@ -19,6 +19,10 @@ import {
   LABOUR_LABEL_SETTING_KEY,
   resolveLabourLabel,
 } from "@/lib/labour-label";
+import {
+  QUOTES_AI_PRICING_PROMPT_DEFAULT,
+  QUOTES_AI_PRICING_PROMPT_KEY,
+} from "@/lib/quotes-ai-pricing-prompt";
 import type { Tenant } from "@/types/database";
 
 const CURRENCY_OPTIONS: { value: string; label: string }[] = [
@@ -209,9 +213,22 @@ export function SettingsForm({
       LABOUR_LABEL_SETTING_KEY,
       labourLabel,
     );
+    if (labourErr) {
+      setPending(false);
+      setError(labourErr);
+      return;
+    }
+
+    const pricingPrompt =
+      String(form.get("ai_pricing_prompt") ?? "").trim() ||
+      QUOTES_AI_PRICING_PROMPT_DEFAULT;
+    const { error: pricingErr } = await upsertSettingValue(
+      QUOTES_AI_PRICING_PROMPT_KEY,
+      pricingPrompt,
+    );
 
     setPending(false);
-    if (labourErr) setError(labourErr);
+    if (pricingErr) setError(pricingErr);
     else router.refresh();
   }
 
@@ -377,6 +394,24 @@ export function SettingsForm({
               name="labour_label"
               defaultValue={resolveLabourLabel(keyValues[LABOUR_LABEL_SETTING_KEY])}
               placeholder={DEFAULT_LABOUR_LABEL}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              AI pricing guide
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              Rates the AI uses when parsing a client message on Quotes or the New Job
+              &ldquo;Add with AI&rdquo; tab — e.g. &ldquo;Drain clearing £150/hr, Vactor work
+              £250/hr, callout fee £45&rdquo;. A price stated in the client&apos;s own message
+              always wins over this; it only fills in what the message doesn&apos;t say.
+            </p>
+            <textarea
+              name="ai_pricing_prompt"
+              rows={4}
+              defaultValue={keyValues[QUOTES_AI_PRICING_PROMPT_KEY] ?? ""}
+              placeholder={QUOTES_AI_PRICING_PROMPT_DEFAULT}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
