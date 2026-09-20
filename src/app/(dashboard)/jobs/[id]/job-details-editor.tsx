@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateJob } from "@/actions/jobs";
+import { DEFAULT_JOB_TYPE, JOB_TYPE_OPTIONS, isValidJobType } from "@/lib/job-type-options";
 
 type Initial = {
   title: string;
@@ -44,7 +45,7 @@ export function JobDetailsEditor({
     setError(null);
     const { error: err } = await updateJob(jobId, {
       title: fields.title.trim() || "Job",
-      job_type: fields.job_type.trim() || null,
+      job_type: isValidJobType(fields.job_type) ? fields.job_type : DEFAULT_JOB_TYPE,
       description: fields.description.trim() || null,
       date_onsite: fields.date_onsite.trim() || null,
       time_onsite: fields.time_onsite.trim() || null,
@@ -83,12 +84,17 @@ export function JobDetailsEditor({
         </label>
         <label className="text-xs text-slate-600">
           Job type
-          <input
+          <select
             className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-            placeholder="e.g. Drain clearance"
-            value={fields.job_type}
+            value={isValidJobType(fields.job_type) ? fields.job_type : DEFAULT_JOB_TYPE}
             onChange={(e) => setFields((f) => ({ ...f, job_type: e.target.value }))}
-          />
+          >
+            {JOB_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="text-xs text-slate-600">
           Date onsite

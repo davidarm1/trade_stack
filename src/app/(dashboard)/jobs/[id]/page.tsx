@@ -14,6 +14,7 @@ import { JobDetailActions } from "./job-detail-actions";
 import { ClientNameEditor } from "./client-name-editor";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 import { JobDetailsEditor } from "./job-details-editor";
+import { JOB_TYPE_OPTIONS } from "@/lib/job-type-options";
 
 const CURRENCY_TO_LOCALE: Record<string, string> = {
   GBP: "en-GB",
@@ -262,7 +263,10 @@ export default async function Page({
               {j.job_type ? (
                 <div>
                   <dt className="text-slate-500">Job type</dt>
-                  <dd className="text-slate-900">{j.job_type}</dd>
+                  <dd className="text-slate-900">
+                    {JOB_TYPE_OPTIONS.find((o) => o.value === j.job_type)?.label ??
+                      j.job_type}
+                  </dd>
                 </div>
               ) : null}
               <div>

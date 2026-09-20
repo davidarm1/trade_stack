@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateJob } from "@/actions/jobs";
+import { DEFAULT_JOB_TYPE, JOB_TYPE_OPTIONS, isValidJobType } from "@/lib/job-type-options";
 
 type EngineerOption = { id: string; name: string | null };
 
@@ -70,7 +71,7 @@ export function EditJobForm({
     const { error: updateErr } = await updateJob(initial.id, {
       title,
       description: asNullableText("description"),
-      job_type: asNullableText("job_type"),
+      job_type: isValidJobType(asText("job_type")) ? asText("job_type") : DEFAULT_JOB_TYPE,
       status: asNullableText("status"),
       assigned_engineer_membership_id: asNullableText("assigned_engineer_membership_id"),
       date_onsite: asNullableText("date_onsite"),
@@ -118,12 +119,17 @@ export function EditJobForm({
         <label className="block text-sm font-medium text-slate-700">
           Job type
         </label>
-        <input
+        <select
           name="job_type"
-          placeholder="e.g. Drain clearance"
-          defaultValue={initial.job_type ?? ""}
+          defaultValue={isValidJobType(initial.job_type) ? initial.job_type : DEFAULT_JOB_TYPE}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
+        >
+          {JOB_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>

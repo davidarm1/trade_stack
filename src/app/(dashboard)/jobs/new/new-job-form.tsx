@@ -6,6 +6,7 @@ import { createClient, searchClients } from "@/actions/clients";
 import { createJob } from "@/actions/jobs";
 import type { Client } from "@/types/database";
 import type { JobAiPrefill } from "@/types/job-ai-prefill";
+import { DEFAULT_JOB_TYPE, JOB_TYPE_OPTIONS, isValidJobType } from "@/lib/job-type-options";
 
 type UserOpt = { id: string; name: string | null };
 
@@ -153,7 +154,8 @@ export function NewJobForm({
     const form = new FormData(e.currentTarget);
     const title = String(form.get("title") || "");
     const description = String(form.get("description") || "");
-    const job_type = String(form.get("job_type") || "").trim() || null;
+    const job_type_raw = String(form.get("job_type") || "");
+    const job_type = isValidJobType(job_type_raw) ? job_type_raw : DEFAULT_JOB_TYPE;
     const assigned = String(form.get("assigned_engineer_membership_id") || "");
     const date_onsite = String(form.get("date_onsite") || "") || null;
     const time_onsite = String(form.get("time_onsite") || "").trim() || null;
@@ -561,12 +563,19 @@ export function NewJobForm({
         <label className="block text-sm font-medium text-slate-700">
           Job type
         </label>
-        <input
+        <select
           name="job_type"
-          placeholder="e.g. Drain clearance"
-          defaultValue={prefill?.job_type ?? ""}
+          defaultValue={
+            isValidJobType(prefill?.job_type) ? prefill.job_type : DEFAULT_JOB_TYPE
+          }
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
+        >
+          {JOB_TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700">
