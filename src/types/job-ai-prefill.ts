@@ -2,7 +2,6 @@
 export type JobAiPrefill = {
   title?: string;
   description?: string;
-  job_type?: string | null;
   date_onsite?: string | null;
   time_onsite?: string | null;
   site_address1?: string;

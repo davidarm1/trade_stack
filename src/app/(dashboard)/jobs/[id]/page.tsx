@@ -14,7 +14,6 @@ import { JobDetailActions } from "./job-detail-actions";
 import { ClientNameEditor } from "./client-name-editor";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 import { JobDetailsEditor } from "./job-details-editor";
-import { JOB_TYPE_OPTIONS } from "@/lib/job-type-options";
 
 const CURRENCY_TO_LOCALE: Record<string, string> = {
   GBP: "en-GB",
@@ -99,7 +98,6 @@ export default async function Page({
     payment_status?: string | null;
     signature_required?: boolean | null;
     description?: string | null;
-    job_type?: string | null;
     site_address1?: string | null;
     site_address2?: string | null;
     site_town?: string | null;
@@ -260,15 +258,6 @@ export default async function Page({
                   </dd>
                 </div>
               ) : null}
-              {j.job_type ? (
-                <div>
-                  <dt className="text-slate-500">Job type</dt>
-                  <dd className="text-slate-900">
-                    {JOB_TYPE_OPTIONS.find((o) => o.value === j.job_type)?.label ??
-                      j.job_type}
-                  </dd>
-                </div>
-              ) : null}
               <div>
                 <dt className="text-slate-500">Status</dt>
                 <dd className="text-slate-900">{String(j.status ?? "—")}</dd>
@@ -300,7 +289,6 @@ export default async function Page({
                 jobId={j.id}
                 initial={{
                   title: titleStr,
-                  job_type: String(j.job_type ?? ""),
                   description: String(j.description ?? ""),
                   date_onsite:
                     typeof j.date_onsite === "string" ? j.date_onsite : "",

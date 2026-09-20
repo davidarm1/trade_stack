@@ -8,7 +8,6 @@ import {
   QUOTES_AI_PRICING_PROMPT_KEY,
 } from "@/lib/quotes-ai-pricing-prompt";
 import type { JobAiPrefill } from "@/types/job-ai-prefill";
-import { DEFAULT_JOB_TYPE, isValidJobType } from "@/lib/job-type-options";
 
 export const runtime = "nodejs";
 
@@ -17,7 +16,6 @@ Return ONLY a JSON object (no markdown fences) with these keys. Use null for any
 
 - title: short job title (string, required if any work is described)
 - description: the scope of work only — if the message has an explicit "Job description:" (or "Scope of work:", "Details:") line or sentence, use exactly that; otherwise a short plain-English summary of the work requested. Do NOT copy the whole message, and do NOT repeat customer/site address or pricing details that are already captured in other fields below.
-- job_type: exactly one of "standard", "emergency", "maintenance", "survey", "sub_job" — this is an internal urgency/category flag, NOT the trade or type of work being done (a "Job type:" line in the message describing the trade, e.g. "Drain clearance", does NOT belong here — that belongs in title/description instead). Use "emergency" only if the message signals urgency (e.g. "urgent", "ASAP", a leak/flood/no heating); "maintenance" for routine/scheduled servicing; "survey" for a site visit/quote/inspection with no work done yet; "sub_job" only if the message explicitly says this is part of a larger job; otherwise "standard".
 - customer_type: "domestic" if this looks like a homeowner/private person, "business" if it looks like a company/commercial customer
 - date_onsite: YYYY-MM-DD if a specific visit date is mentioned, else null
 - time_onsite: a time or time window if one is mentioned (e.g. "2pm", "morning", "9-11am"), as plain text, else null
@@ -176,11 +174,6 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
   return {
     ...prefill,
     description,
-    // job_type is a fixed enum — the model already validated it (or left it
-    // null) in toPrefill; there's no safe way to regex-guess it from free
-    // text, so default to "standard" rather than leave the DB's own
-    // NOT NULL default silently disagree with what the form shows.
-    job_type: isValidJobType(prefill.job_type) ? prefill.job_type : DEFAULT_JOB_TYPE,
     vat_rate: vatRate ?? null,
     new_company_name: prefill.new_company_name ?? labelledCompanyName ?? contactName,
     new_contact_name: contactName,
@@ -214,9 +207,6 @@ function toPrefill(obj: Record<string, unknown>): JobAiPrefill {
   const prefill: JobAiPrefill = {
     title: str(obj.title).trim() || undefined,
     description: str(obj.description).trim() || undefined,
-    // job_type is a fixed-enum DB column — never pass through arbitrary
-    // model text (it once tried "Drain clearance" and broke job creation).
-    job_type: isValidJobType(obj.job_type) ? obj.job_type : null,
     date_onsite: strOrNull(obj.date_onsite),
     time_onsite: strOrNull(obj.time_onsite),
     site_address1: site1.trim() || undefined,

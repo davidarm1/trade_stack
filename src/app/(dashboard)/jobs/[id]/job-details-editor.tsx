@@ -3,11 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateJob } from "@/actions/jobs";
-import { DEFAULT_JOB_TYPE, JOB_TYPE_OPTIONS, isValidJobType } from "@/lib/job-type-options";
 
 type Initial = {
   title: string;
-  job_type: string;
   description: string;
   date_onsite: string;
   time_onsite: string;
@@ -15,10 +13,10 @@ type Initial = {
 
 /**
  * Inline editor for the fields the AI job parser (or a person) most often
- * gets wrong or leaves blank — title, job type, description, date/time
- * onsite. These previously had no on-page way to fix: only the separate
- * /edit page touched them, several steps away from where the job sheet
- * preview shows the mistake.
+ * gets wrong or leaves blank — title, description, date/time onsite. These
+ * previously had no on-page way to fix: only the separate /edit page
+ * touched them, several steps away from where the job sheet preview shows
+ * the mistake.
  */
 export function JobDetailsEditor({
   jobId,
@@ -45,7 +43,6 @@ export function JobDetailsEditor({
     setError(null);
     const { error: err } = await updateJob(jobId, {
       title: fields.title.trim() || "Job",
-      job_type: isValidJobType(fields.job_type) ? fields.job_type : DEFAULT_JOB_TYPE,
       description: fields.description.trim() || null,
       date_onsite: fields.date_onsite.trim() || null,
       time_onsite: fields.time_onsite.trim() || null,
@@ -81,20 +78,6 @@ export function JobDetailsEditor({
             value={fields.title}
             onChange={(e) => setFields((f) => ({ ...f, title: e.target.value }))}
           />
-        </label>
-        <label className="text-xs text-slate-600">
-          Job type
-          <select
-            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-            value={isValidJobType(fields.job_type) ? fields.job_type : DEFAULT_JOB_TYPE}
-            onChange={(e) => setFields((f) => ({ ...f, job_type: e.target.value }))}
-          >
-            {JOB_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </label>
         <label className="text-xs text-slate-600">
           Date onsite

@@ -27,7 +27,6 @@ export default async function EditJobPage({
     id: string;
     title: string | null;
     description: string | null;
-    job_type: string | null;
     status: string | null;
     assigned_engineer_membership_id: string | null;
     date_onsite: string | null;
@@ -65,7 +64,6 @@ export default async function EditJobPage({
           id: job.id,
           title: job.title,
           description: job.description,
-          job_type: job.job_type,
           status: job.status,
           assigned_engineer_membership_id: job.assigned_engineer_membership_id,
           date_onsite: job.date_onsite,
