@@ -127,12 +127,20 @@ function extractAddressParts(text: string): {
   return { address1, town, postcode };
 }
 
-/** Grabs the value after a "Label:" line, e.g. "Job description: Attend site to clear drains." */
+/**
+ * Grabs the value after a "Label:" — either on the same line
+ * ("Job type: Drain clearance") or, if nothing follows the colon, the next
+ * non-blank line ("Customer:\nAtlas Maintenance (Scotland) Ltd").
+ */
 function extractLabelledLine(text: string, labels: string[]): string | undefined {
   for (const label of labels) {
-    const re = new RegExp(`\\b${label}\\s*:\\s*([^\\n]+)`, "iu");
-    const value = text.match(re)?.[1]?.trim();
-    if (value) return value;
+    const sameLine = text.match(new RegExp(`\\b${label}\\s*:[ \\t]*([^\\n]+)`, "iu"));
+    const inline = sameLine?.[1]?.trim();
+    if (inline) return inline;
+
+    const nextLine = text.match(new RegExp(`\\b${label}\\s*:[ \\t]*\\n\\s*([^\\n]+)`, "iu"));
+    const next = nextLine?.[1]?.trim();
+    if (next) return next;
   }
   return undefined;
 }
@@ -147,6 +155,12 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
   const contactName = prefill.new_contact_name ?? extractCustomerName(sourceText);
   const phone = prefill.new_contact_number ?? extractPhone(sourceText);
   const address = extractAddressParts(sourceText);
+  const labelledCompanyName = extractLabelledLine(sourceText, [
+    "Customer",
+    "Client",
+    "Bill to",
+    "Account name",
+  ]);
   // If the model didn't return a description, try to pull the explicit
   // labelled line from the message before falling back to dumping the
   // entire raw message in — a formal PO-style message already has this
@@ -165,7 +179,7 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
     description,
     job_type: jobType ?? null,
     vat_rate: vatRate ?? null,
-    new_company_name: prefill.new_company_name ?? contactName,
+    new_company_name: prefill.new_company_name ?? labelledCompanyName ?? contactName,
     new_contact_name: contactName,
     new_contact_number: phone,
     site_address1: prefill.site_address1 ?? address.address1,
