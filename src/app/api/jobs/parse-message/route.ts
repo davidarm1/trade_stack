@@ -127,6 +127,67 @@ function extractAddressParts(text: string): {
 }
 
 /**
+ * Lines following a "Label:\n..." block, up to the first blank line or the
+ * next "Something:" style label line (so "Telephone: ..." / "Email: ..."
+ * right after an address don't get swept in as address lines).
+ */
+function extractLabelledBlockLines(text: string, label: string): string[] {
+  const re = new RegExp(
+    `\\b${label}\\s*:[ \\t]*\\n([\\s\\S]*?)(?=\\n[ \\t]*\\n|\\n[A-Za-z][A-Za-z ]{1,30}:|$)`,
+    "iu",
+  );
+  const match = text.match(re);
+  if (!match) return [];
+  return match[1]
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/** Distributes 1+ free-text address lines across address1/address2/town. */
+function splitAddressLines(lines: string[]): {
+  address1?: string;
+  address2?: string;
+  town?: string;
+} {
+  if (lines.length === 0) return {};
+  if (lines.length === 1) return { address1: lines[0] };
+  if (lines.length === 2) return { address1: lines[0], town: lines[1] };
+  return {
+    address1: lines[0],
+    address2: lines.slice(1, -1).join(", "),
+    town: lines[lines.length - 1],
+  };
+}
+
+/**
+ * A full address block under a label, e.g.
+ * "Site:\nSGN Axis Edinburgh\nAxis House\n5 Lonehead Drive\nNewbridge\nEdinburgh\nEH28 8TG"
+ * — first line is the name (company/site name), the postcode is found
+ * within the block specifically (not the first one anywhere in the whole
+ * message), and everything else in between is split across address lines
+ * and town. Distinct labelled blocks (e.g. "Customer" vs "Site") are kept
+ * fully independent so one address never leaks into another's fields.
+ */
+function extractLabelledAddress(
+  text: string,
+  labels: string[],
+): { name?: string; address1?: string; address2?: string; town?: string; postcode?: string } {
+  for (const label of labels) {
+    const lines = extractLabelledBlockLines(text, label);
+    if (lines.length === 0) continue;
+    const [name, ...rest] = lines;
+    const postcode = extractPostcode(rest.join("\n"));
+    const addressLines = postcode
+      ? rest.filter((l) => !l.toUpperCase().includes(postcode))
+      : rest;
+    const { address1, address2, town } = splitAddressLines(addressLines);
+    if (address1 || postcode) return { name, address1, address2, town, postcode };
+  }
+  return {};
+}
+
+/**
  * Grabs the value after a "Label:" — either on the same line
  * ("Job type: Drain clearance") or, if nothing follows the colon, the next
  * non-blank line ("Customer:\nAtlas Maintenance (Scotland) Ltd").
@@ -150,16 +211,45 @@ function extractVatRatePercent(text: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function extractPriceExVat(text: string): number | undefined {
+  const match = text.match(
+    /\bPrice\s*(?:excluding|ex\.?)\s*VAT\s*:?\s*£?\s*(\d+(?:[.,]\d+)?)/iu,
+  );
+  const raw = match?.[1]?.replace(",", "");
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill {
   const contactName = prefill.new_contact_name ?? extractCustomerName(sourceText);
   const phone = prefill.new_contact_number ?? extractPhone(sourceText);
-  const address = extractAddressParts(sourceText);
-  const labelledCompanyName = extractLabelledLine(sourceText, [
+  // Billing (customer) and job-site addresses are extracted from their own
+  // labelled blocks independently — a message can (and here does) contain
+  // several distinct addresses (customer, site, and HydroScot's own), and
+  // conflating them into one generic "first address/postcode found
+  // anywhere" was stamping the customer's postcode onto the site fields.
+  const customerAddr = extractLabelledAddress(sourceText, [
     "Customer",
     "Client",
     "Bill to",
     "Account name",
   ]);
+  const siteAddrRaw = extractLabelledAddress(sourceText, [
+    "Site",
+    "Site address",
+    "Work site",
+    "Job site",
+  ]);
+  // Unlike the customer block, a site has no separate "name" field to hold
+  // its first line (e.g. a building/location name like "SGN Axis
+  // Edinburgh") — fold it into address1 rather than silently dropping it.
+  const siteAddr = {
+    ...siteAddrRaw,
+    address1: [siteAddrRaw.name, siteAddrRaw.address1].filter(Boolean).join(", ") || undefined,
+  };
+  // Last-resort generic scan for informal messages with no labelled blocks.
+  const generic = extractAddressParts(sourceText);
+
   // If the model didn't return a description, try to pull the explicit
   // labelled line from the message before falling back to dumping the
   // entire raw message in — a formal PO-style message already has this
@@ -170,23 +260,35 @@ function applyFallbacks(prefill: JobAiPrefill, sourceText: string): JobAiPrefill
     extractLabelledLine(sourceText, ["Job description", "Scope of work", "Details"]) ||
     sourceText;
   const vatRate = prefill.vat_rate ?? extractVatRatePercent(sourceText) ?? undefined;
+  const labourCharge = prefill.labour_charge ?? extractPriceExVat(sourceText) ?? undefined;
 
   return {
     ...prefill,
     description,
+    labour_charge: labourCharge ?? null,
     vat_rate: vatRate ?? null,
-    new_company_name: prefill.new_company_name ?? labelledCompanyName ?? contactName,
+    new_company_name: prefill.new_company_name ?? customerAddr.name ?? contactName,
     new_contact_name: contactName,
     new_contact_number: phone,
-    site_address1: prefill.site_address1 ?? address.address1,
-    site_town: prefill.site_town ?? address.town,
-    site_postcode: prefill.site_postcode ?? address.postcode,
-    new_address1: prefill.new_address1 ?? address.address1,
-    new_town: prefill.new_town ?? address.town,
-    new_postcode: prefill.new_postcode ?? address.postcode,
-    new_site_address1: prefill.new_site_address1 ?? address.address1,
-    new_site_town: prefill.new_site_town ?? address.town,
-    new_site_postcode: prefill.new_site_postcode ?? address.postcode,
+    new_address1: prefill.new_address1 ?? customerAddr.address1 ?? generic.address1,
+    new_address2: prefill.new_address2 ?? customerAddr.address2,
+    new_town: prefill.new_town ?? customerAddr.town ?? generic.town,
+    new_postcode: prefill.new_postcode ?? customerAddr.postcode ?? generic.postcode,
+    // Job site: use a distinct "Site:" block if the message has one, else
+    // assume the work happens at the customer's own address — but never mix
+    // lines/postcode across the two.
+    site_address1:
+      prefill.site_address1 ?? siteAddr.address1 ?? customerAddr.address1 ?? generic.address1,
+    site_address2: prefill.site_address2 ?? siteAddr.address2 ?? customerAddr.address2,
+    site_town: prefill.site_town ?? siteAddr.town ?? customerAddr.town ?? generic.town,
+    site_postcode:
+      prefill.site_postcode ?? siteAddr.postcode ?? customerAddr.postcode ?? generic.postcode,
+    // Only set new_site_* (meaning "site differs from billing") when an
+    // actual separate Site: block was found in the message.
+    new_site_address1: prefill.new_site_address1 ?? siteAddr.address1,
+    new_site_address2: prefill.new_site_address2 ?? siteAddr.address2,
+    new_site_town: prefill.new_site_town ?? siteAddr.town,
+    new_site_postcode: prefill.new_site_postcode ?? siteAddr.postcode,
     payment_terms_days: prefill.payment_terms_days ?? 0,
     new_payment_terms_days: prefill.new_payment_terms_days ?? 0,
   };
