@@ -979,7 +979,9 @@ export async function duplicateJob(id: string) {
       invoice_sent_at: null,
       invoice_sent_to_email: null,
       invoice_paid_at: null,
-      payment_status: null,
+      // payment_status is a status enum (like job status), not an event
+      // timestamp — it's NOT NULL and always needs a real value.
+      payment_status: "unpaid",
       custom_invoice_number: null,
       custom_po_number: null,
       legacy_ref: null,
