@@ -106,12 +106,17 @@ export async function createJob(data: JobInsert) {
 
   const vat_rate =
     rest.vat_rate ?? (await resolveDefaultVatRate(supabase, ctx.tenantId));
+  // labour_charge is also NOT NULL — many jobs genuinely can't be priced
+  // until the work's done, so blank means "not priced yet" (0), not an
+  // error. Edit invoice details (or line items) once the real cost is known.
+  const labour_charge = rest.labour_charge ?? 0;
 
   const { data: row, error } = await supabase
     .from("jobs")
     .insert({
       ...rest,
       vat_rate,
+      labour_charge,
       tenant_id: ctx.tenantId,
       created_by_id: ctx.userId,
       created_by_membership_id: ctx.membershipId ?? null,
@@ -168,17 +173,23 @@ export async function updateJob(id: string, data: JobInsert) {
       .maybeSingle();
     if (membershipError) return { data: null, error: membershipError.message };
     if (!membership?.user_id) {
-      // TEMPORARY diagnostic — remove once the cause of this miss is found.
-      console.error("[updateJob] could not resolve engineer membership", {
-        jobId: id,
-        actorUserId: ctx.userId,
-        actorTenantId: ctx.tenantId,
-        actorMembershipId: ctx.membershipId,
-        selectedMembershipId: safe.assigned_engineer_membership_id,
-      });
       return { data: null, error: "Could not resolve the selected engineer's account." };
     }
     (safe as Record<string, unknown>).assigned_engineer_id = membership.user_id;
+  }
+
+  // vat_rate and labour_charge are NOT NULL — clearing either field back to
+  // blank must resolve to a real value, not send null and violate the
+  // constraint (this form's Labour charge field has no "leave blank" text,
+  // but a blank input still submits as null).
+  if ("vat_rate" in safe && safe.vat_rate == null) {
+    (safe as Record<string, unknown>).vat_rate = await resolveDefaultVatRate(
+      supabase,
+      ctx.tenantId,
+    );
+  }
+  if ("labour_charge" in safe && safe.labour_charge == null) {
+    (safe as Record<string, unknown>).labour_charge = 0;
   }
 
   const { data: row, error } = await supabase
@@ -293,13 +304,16 @@ export async function updateJobInvoiceDetails(
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  // vat_rate is NOT NULL — clearing the field back to blank in the editor
-  // must resolve to the tenant default, not send null and violate the
-  // constraint.
-  const patch =
-    "vat_rate" in data && data.vat_rate == null
-      ? { ...data, vat_rate: await resolveDefaultVatRate(supabase, ctx.tenantId) }
-      : data;
+  // vat_rate and labour_charge are both NOT NULL — clearing either field
+  // back to blank in the editor must resolve to a real value, not send
+  // null and violate the constraint.
+  let patch = data;
+  if ("vat_rate" in patch && patch.vat_rate == null) {
+    patch = { ...patch, vat_rate: await resolveDefaultVatRate(supabase, ctx.tenantId) };
+  }
+  if ("labour_charge" in patch && patch.labour_charge == null) {
+    patch = { ...patch, labour_charge: 0 };
+  }
 
   const { data: row, error } = await supabase
     .from("jobs")

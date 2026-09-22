@@ -729,6 +729,7 @@ export function NewJobForm({
             type="number"
             step="0.01"
             min="0"
+            placeholder="Leave blank if not priced yet"
             defaultValue={
               prefill?.labour_charge != null ? String(prefill.labour_charge) : ""
             }
