@@ -904,6 +904,121 @@ export async function deleteJob(id: string) {
   return { data: true, error: null };
 }
 
+/**
+ * Duplicates a job for recurring work (e.g. a monthly retainer) — copies
+ * the client/site/pricing detail across but resets everything that belongs
+ * to the previous occurrence specifically: status, date/time onsite,
+ * engineer assignment, and every workflow/completion timestamp.
+ */
+export async function duplicateJob(id: string) {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const { data: source, error: srcErr } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (srcErr) return { data: null, error: srcErr.message };
+  if (!source) return { data: null, error: "Job not found" };
+
+  const { data: sourceMaterials, error: matErr } = await supabase
+    .from("job_materials")
+    .select("description, quantity, unit_price, sort_order")
+    .eq("job_id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .order("sort_order", { ascending: true });
+  if (matErr) return { data: null, error: matErr.message };
+
+  const { jobNumber, error: allocErr } = await allocateNextJobNumber();
+  if (allocErr || jobNumber == null) {
+    return { data: null, error: allocErr ?? "Could not allocate job number" };
+  }
+
+  const vat_rate =
+    source.vat_rate ?? (await resolveDefaultVatRate(supabase, ctx.tenantId));
+
+  const { data: row, error } = await supabase
+    .from("jobs")
+    .insert({
+      tenant_id: ctx.tenantId,
+      client_id: source.client_id,
+      title: source.title,
+      description: source.description,
+      site_address1: source.site_address1,
+      site_address2: source.site_address2,
+      site_town: source.site_town,
+      site_postcode: source.site_postcode,
+      labour_charge: source.labour_charge ?? 0,
+      vat_rate,
+      remove_vat: source.remove_vat,
+      payment_terms_days: source.payment_terms_days,
+      client_order_number: source.client_order_number,
+      signature_required: source.signature_required,
+      notes: source.notes,
+      // Traceable lineage for recurring jobs — this column already existed
+      // but nothing in the app set it until now.
+      parent_job_id: source.id,
+      status: "open",
+      job_number: jobNumber,
+      created_by_id: ctx.userId,
+      created_by_membership_id: ctx.membershipId ?? null,
+      // Explicitly reset — these all belong to the previous occurrence,
+      // not the new one.
+      date_onsite: null,
+      time_onsite: null,
+      assigned_engineer_membership_id: null,
+      assigned_engineer_id: null,
+      allocated_at: null,
+      sent_to_engineer_at: null,
+      received_from_engineer_at: null,
+      approved_at: null,
+      approved_by_membership_id: null,
+      invoice_sent_at: null,
+      invoice_sent_to_email: null,
+      invoice_paid_at: null,
+      payment_status: null,
+      custom_invoice_number: null,
+      custom_po_number: null,
+      legacy_ref: null,
+      jobsheet_url: null,
+      signature_url: null,
+      signed_at: null,
+      overdue_comment: null,
+      sent_to_debt_collection_at: null,
+    })
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+
+  if (sourceMaterials && sourceMaterials.length > 0) {
+    const { error: insMatErr } = await supabase.from("job_materials").insert(
+      sourceMaterials.map((m) => ({
+        tenant_id: ctx.tenantId,
+        job_id: row.id,
+        description: m.description,
+        quantity: m.quantity,
+        unit_price: m.unit_price,
+        total_price: round2(finiteOrZero(m.quantity) * finiteOrZero(m.unit_price)),
+        sort_order: m.sort_order,
+      })),
+    );
+    if (insMatErr) return { data: null, error: insMatErr.message };
+  }
+
+  await recalcAndPersistJobTotals({
+    supabase,
+    tenantId: ctx.tenantId,
+    jobId: row.id,
+  });
+
+  revalidatePath("/jobs");
+  return { data: row, error: null };
+}
+
 export async function getJobs(options?: { search?: string }) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
@@ -1095,9 +1210,20 @@ export const getJob = cache(async function getJob(id: string) {
     .eq("tenant_id", ctx.tenantId)
     .order("created_at", { ascending: false });
 
+  let parentJobNumber: number | null = null;
+  if (job.parent_job_id) {
+    const { data: parent } = await supabase
+      .from("jobs")
+      .select("job_number")
+      .eq("id", job.parent_job_id)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+    parentJobNumber = parent?.job_number ?? null;
+  }
+
   return {
     data: {
-      job: { ...job, engineer, clients: clientRow },
+      job: { ...job, engineer, clients: clientRow, parent_job_number: parentJobNumber },
       materials: materials ?? [],
       completion,
       images: images ?? [],

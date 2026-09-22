@@ -94,6 +94,8 @@ export default async function Page({
     client_id?: string | null;
     job_number?: number | null;
     legacy_ref?: string | null;
+    parent_job_id?: string | null;
+    parent_job_number?: number | null;
     custom_po_number?: string | null;
     title?: string | null;
     status?: string | null;
@@ -249,6 +251,28 @@ export default async function Page({
                 <dt className="text-slate-500">Job number</dt>
                 <dd className="font-mono text-slate-900">{plainJobNo}</dd>
               </div>
+              {j.parent_job_id ? (
+                <div>
+                  <dt className="text-slate-500">Duplicated from</dt>
+                  <dd className="text-slate-900">
+                    {j.parent_job_number != null ? (
+                      <Link
+                        href={`/jobs/${j.parent_job_id}`}
+                        className="font-mono text-slate-700 underline hover:text-slate-900"
+                      >
+                        {formatJobRefFormal(j.parent_job_number)}
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/jobs/${j.parent_job_id}`}
+                        className="underline hover:text-slate-900"
+                      >
+                        Original job
+                      </Link>
+                    )}
+                  </dd>
+                </div>
+              ) : null}
               {legacy ? (
                 <div>
                   <dt className="text-slate-500">Legacy ref</dt>
