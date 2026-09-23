@@ -14,12 +14,17 @@ async function loadTeamRows() {
   }
 
   const supabase = await createClient();
-  const { data: me } = await supabase
-    .from("users")
+  // Scoped to this company's membership, not the global users.role — a
+  // freelancer/owner-elsewhere might be owner at their own company but only
+  // an engineer (or nothing) here, and the UI gating below needs to reflect
+  // that, not their role somewhere else.
+  const { data: myMembership } = await supabase
+    .from("memberships")
     .select("role")
-    .eq("id", ctx.userId)
+    .eq("user_id", ctx.userId)
+    .eq("company_id", ctx.tenantId)
     .maybeSingle();
-  const currentUserRole = (me?.role as UserRole | undefined) ?? null;
+  const currentUserRole = (myMembership?.role as UserRole | undefined) ?? null;
 
   const { data: rows, error } = await getTeamMembers();
   if (error) {

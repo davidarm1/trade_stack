@@ -13,7 +13,7 @@ import { generateAndSendPasswordResetEmail } from "@/lib/password-reset";
 import {
   getTeamMemberActionPermission,
 } from "@/lib/team-member-permissions";
-import type { MobileAccessToken, UserRole, UserRow } from "@/types/database";
+import type { MobileAccessToken, UserRole } from "@/types/database";
 
 export type TeamMemberUpdate = {
   name?: string | null;
@@ -38,81 +38,39 @@ type TeamActor = {
 
 export type EngineerOption = { id: string; name: string | null };
 
+// Membership-driven, not users.tenant_id-driven: a person can have an
+// active membership at this company regardless of which company their
+// users row calls "home" (a freelancer working for several companies).
+// Iterating memberships first, rather than filtering users by tenant_id
+// and then matching a membership, is what makes that visible here.
 export async function getAssignableEngineers() {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }] =
-    await Promise.all([
-      supabase
-        .from("users")
-        .select("id, role, is_active, name, email, tenant_id")
-        .eq("tenant_id", ctx.tenantId),
-      supabase
-        .from("memberships")
-        .select("id, user_id, display_name, status, company_id")
-        .eq("company_id", ctx.tenantId)
-        .order("display_name", { ascending: true }),
-    ]);
-
-  if (usersError) return { data: null, error: usersError.message };
+  const { data: memberships, error: membershipsError } = await supabase
+    .from("memberships")
+    .select("id, user_id, display_name")
+    .eq("company_id", ctx.tenantId)
+    .eq("status", "active")
+    .order("display_name", { ascending: true });
   if (membershipsError) return { data: null, error: membershipsError.message };
 
-  const activeUsers = (users ?? []).filter((u) => u.is_active !== false);
-  const membershipByUserId = new Map(
-    (memberships ?? []).map((m) => [m.user_id, m] as const),
-  );
+  const userIds = [...new Set((memberships ?? []).map((m) => m.user_id))];
+  const { data: users, error: usersError } =
+    userIds.length > 0
+      ? await supabase.from("users").select("id, name, email").in("id", userIds)
+      : { data: [] as { id: string; name: string | null; email: string | null }[], error: null };
+  if (usersError) return { data: null, error: usersError.message };
+  const userById = new Map((users ?? []).map((u) => [u.id, u] as const));
 
-  const missingMembershipUsers = activeUsers.filter((u) => !membershipByUserId.has(u.id));
-  if (missingMembershipUsers.length > 0) {
-    try {
-      const admin = createServiceRoleClient();
-      const now = new Date().toISOString();
-      const rows = missingMembershipUsers.map((u) => ({
-        user_id: u.id,
-        company_id: ctx.tenantId,
-        role: String(u.role ?? "viewer"),
-        status: "active",
-        display_name: u.name ?? null,
-        job_title: null,
-        employee_ref: null,
-        work_phone: null,
-        concurrent_allowed: false,
-        created_at: now,
-        updated_at: now,
-      }));
-
-      const { data: created, error: createError } = await admin
-        .from("memberships")
-        .upsert(rows, { onConflict: "user_id,company_id" })
-        .select("id, user_id, display_name, status, company_id");
-      if (createError) return { data: null, error: createError.message };
-
-      for (const membership of created ?? []) {
-        membershipByUserId.set(membership.user_id, membership);
-      }
-    } catch (error) {
-      return {
-        data: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not prepare engineer assignments.",
-      };
-    }
-  }
-
-  const engineers = activeUsers
-    .map((u) => {
-      const membership = membershipByUserId.get(u.id);
-      if (!membership) return null;
-      return {
-        id: membership.id,
-        name: membership.display_name ?? u.name ?? u.email ?? membership.id,
-      };
-    })
-    .filter((v): v is EngineerOption => v !== null);
+  const engineers: EngineerOption[] = (memberships ?? []).map((m) => {
+    const u = userById.get(m.user_id);
+    return {
+      id: m.id,
+      name: m.display_name ?? u?.name ?? u?.email ?? m.id,
+    };
+  });
 
   return { data: engineers, error: null };
 }
@@ -163,19 +121,52 @@ export async function getTeamMembersWithMembershipIds(): Promise<{
   return { data: options, error: null };
 }
 
+// Same membership-driven shift as getAssignableEngineers, but keeps the
+// returned row shape identical to the old users-row shape (id/name/email/
+// role/is_active, all other users columns too) — role and is_active are
+// just overlaid from this company's membership instead of the global user
+// row, so the Team page UI doesn't need to change at all. A person only
+// shows up here if they have a membership at THIS company, regardless of
+// which company their users row calls home.
 export async function getTeamMembers() {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data: memberships, error: mErr } = await supabase
+    .from("memberships")
+    .select("user_id, role, status, display_name")
+    .eq("company_id", ctx.tenantId);
+  if (mErr) return { data: null, error: mErr.message };
+
+  const userIds = [...new Set((memberships ?? []).map((m) => m.user_id))];
+  if (userIds.length === 0) return { data: [], error: null };
+
+  const { data: users, error: uErr } = await supabase
     .from("users")
     .select("*")
-    .eq("tenant_id", ctx.tenantId)
-    .order("name", { ascending: true });
+    .in("id", userIds);
+  if (uErr) return { data: null, error: uErr.message };
 
-  if (error) return { data: null, error: error.message };
-  return { data, error: null };
+  const membershipByUserId = new Map(
+    (memberships ?? []).map((m) => [m.user_id, m] as const),
+  );
+
+  const rows = (users ?? [])
+    .map((u) => {
+      const m = membershipByUserId.get(u.id);
+      if (!m) return null;
+      return {
+        ...u,
+        role: m.role as UserRole,
+        is_active: m.status === "active",
+        name: m.display_name ?? u.name,
+      };
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null)
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+
+  return { data: rows, error: null };
 }
 
 async function requireTeamManagerAccess(): Promise<{
@@ -189,26 +180,37 @@ async function requireTeamManagerAccess(): Promise<{
   const ctx = await getTenantContext();
   if (!ctx.success) return { ok: false, error: ctx.error };
   const supabase = await createClient();
-  const { data: me, error } = await supabase
-    .from("users")
-    .select("role, name")
-    .eq("id", ctx.userId)
-    .maybeSingle();
-  if (error || !me?.role) {
-    return { ok: false, error: error?.message ?? "Could not load your profile." };
-  }
-  if (me.role !== "owner" && me.role !== "office") {
-    return { ok: false, error: "Only owners and office staff can manage team access." };
+
+  // Role is scoped to THIS company via the actor's own membership — never
+  // their global users.role. A person can be owner at their own company and
+  // just an engineer (or nothing) at another; trusting the global role here
+  // would let an owner-elsewhere silently manage a team they're not actually
+  // in charge of.
+  let membership: { id: string; role: string; status: string } | null = null;
+  if (ctx.membershipId) {
+    const { data, error } = await supabase
+      .from("memberships")
+      .select("id, role, status")
+      .eq("id", ctx.membershipId)
+      .eq("company_id", ctx.tenantId)
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    membership = data;
   }
 
-  // ctx.membershipId is null when the actor themselves has no active
-  // memberships row yet (same gap ensureMembershipForUser self-heals for
-  // target users below). Falling back to ctx.userId here would hand a raw
-  // auth user id to code that treats it as a memberships.id foreign key
-  // (e.g. mobile_access_tokens.created_by_membership_id) and violate the FK
-  // constraint, so self-heal the actor's own membership instead.
-  let membershipId = ctx.membershipId;
-  if (!membershipId) {
+  if (!membership) {
+    // Genuinely no membership row yet for this company — self-heal from
+    // their profile, same fallback as before. Only reached when nothing
+    // exists yet; an existing-but-inactive membership is handled below
+    // without touching it, so this can never silently reactivate someone.
+    const { data: me, error } = await supabase
+      .from("users")
+      .select("role, name")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    if (error || !me?.role) {
+      return { ok: false, error: error?.message ?? "Could not load your profile." };
+    }
     const ensured = await ensureMembershipForUser(ctx.tenantId, {
       id: ctx.userId,
       role: me.role as UserRole,
@@ -220,7 +222,15 @@ async function requireTeamManagerAccess(): Promise<{
         error: ensured.error ?? "Could not resolve your membership record.",
       };
     }
-    membershipId = ensured.membershipId;
+    membership = { id: ensured.membershipId, role: me.role, status: "active" };
+  }
+
+  if (membership.status !== "active") {
+    return { ok: false, error: "Your access to this company is not currently active." };
+  }
+  const role = membership.role as UserRole;
+  if (role !== "owner" && role !== "office") {
+    return { ok: false, error: "Only owners and office staff can manage team access." };
   }
 
   return {
@@ -228,9 +238,9 @@ async function requireTeamManagerAccess(): Promise<{
     supabase,
     actor: {
       userId: ctx.userId,
-      membershipId,
+      membershipId: membership.id,
       tenantId: ctx.tenantId,
-      role: me.role as UserRole,
+      role,
     },
   };
 }
@@ -306,41 +316,39 @@ async function getTargetUserForTenant(
   tenantId: string,
   userId: string,
 ): Promise<{ id: string; membershipId: string; role: UserRole } | null> {
-  // Two flat queries instead of an embedded `memberships(id)` select: the
-  // memberships.user_id FK points at auth.users, not public.users, so
-  // PostgREST has no relationship to embed through and the nested select
-  // errors out (silently, since we don't surface query errors here) — every
-  // call would hit that, not just users missing a memberships row. This
-  // mirrors the working two-query pattern in getAssignableEngineers above.
-  const { data, error: userError } = await supabase
-    .from("users")
-    .select("id, role, name")
-    .eq("id", userId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (userError || !data?.id || !data?.role) return null;
-
+  // Membership-first, not users.tenant_id-first: a freelancer's membership
+  // at this company is what matters here, not which company their users
+  // row calls home (which could be somewhere else entirely).
   const { data: membership, error: membershipError } = await supabase
     .from("memberships")
-    .select("id")
-    .eq("user_id", data.id)
+    .select("id, role")
+    .eq("user_id", userId)
     .eq("company_id", tenantId)
     .maybeSingle();
   if (membershipError) return null;
 
-  let membershipId = membership?.id ?? null;
-
-  if (!membershipId) {
-    const ensured = await ensureMembershipForUser(tenantId, {
-      id: data.id,
-      role: data.role as UserRole,
-      name: (data as { name?: string | null }).name ?? null,
-    });
-    if (!ensured.membershipId) return null;
-    membershipId = ensured.membershipId;
+  if (membership?.id) {
+    return { id: userId, membershipId: membership.id, role: membership.role as UserRole };
   }
 
-  return { id: data.id, membershipId, role: data.role as UserRole };
+  // No membership yet at this company — self-heal from their profile (the
+  // profile lookup itself is intentionally not scoped by tenant_id, since a
+  // freelancer's home company can be a different one).
+  const { data, error: userError } = await supabase
+    .from("users")
+    .select("id, role, name")
+    .eq("id", userId)
+    .maybeSingle();
+  if (userError || !data?.id || !data?.role) return null;
+
+  const ensured = await ensureMembershipForUser(tenantId, {
+    id: data.id,
+    role: data.role as UserRole,
+    name: (data as { name?: string | null }).name ?? null,
+  });
+  if (!ensured.membershipId) return null;
+
+  return { id: data.id, membershipId: ensured.membershipId, role: data.role as UserRole };
 }
 
 function isAlreadyRegisteredAuthError(error?: { message?: string; code?: string } | null): boolean {
@@ -368,18 +376,27 @@ async function getTeamMemberForTenant(
   tenantId: string,
   userId: string,
 ): Promise<{ id: string; email: string | null; role: UserRole; is_active: boolean } | null> {
-  const { data } = await supabase
-    .from("users")
-    .select("id, email, role, is_active")
-    .eq("id", userId)
-    .eq("tenant_id", tenantId)
+  // Membership-scoped, not users.tenant_id-scoped — see getTargetUserForTenant.
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("role, status")
+    .eq("user_id", userId)
+    .eq("company_id", tenantId)
     .maybeSingle();
-  if (!data?.id || !data.role) return null;
+  if (!membership?.role) return null;
+
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, email")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!user?.id) return null;
+
   return {
-    id: data.id,
-    email: data.email ?? null,
-    role: data.role as UserRole,
-    is_active: Boolean(data.is_active),
+    id: user.id,
+    email: user.email ?? null,
+    role: membership.role as UserRole,
+    is_active: membership.status === "active",
   };
 }
 
@@ -485,6 +502,80 @@ export async function inviteTeamMember(
 
   const tenantId = actor.tenantId;
   const tenantName = await getTenantName(admin, tenantId);
+
+  // Does an auth account already exist for this email? This is the normal
+  // case for a freelancer already active at another company — Supabase
+  // Auth won't let us create a second account for the same email, so reuse
+  // the existing identity and just add a membership at THIS company rather
+  // than treating it as an error.
+  const { data: existingUserRow, error: existingLookupErr } = await admin
+    .from("users")
+    .select("id")
+    .eq("email", trimmedEmail)
+    .maybeSingle();
+  if (existingLookupErr) {
+    return { data: null, error: existingLookupErr.message };
+  }
+
+  if (existingUserRow) {
+    const { data: existingMembership } = await admin
+      .from("memberships")
+      .select("id, status")
+      .eq("user_id", existingUserRow.id)
+      .eq("company_id", tenantId)
+      .maybeSingle();
+    if (existingMembership) {
+      return {
+        data: null,
+        error:
+          existingMembership.status === "active"
+            ? "That person is already on your team."
+            : "That person already has a record here — reactivate them from the Inactive tab instead of inviting again.",
+      };
+    }
+
+    const now = new Date().toISOString();
+    const { data: membership, error: membershipErr } = await admin
+      .from("memberships")
+      .insert({
+        user_id: existingUserRow.id,
+        company_id: tenantId,
+        role,
+        status: "active",
+        display_name: trimmedName || null,
+        job_title: null,
+        employee_ref: null,
+        work_phone: null,
+        // They're now active at more than one company by definition.
+        concurrent_allowed: true,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("id")
+      .single();
+    if (membershipErr || !membership) {
+      return { data: null, error: membershipErr?.message ?? "Could not create membership record." };
+    }
+
+    const { error: spellErr } = await admin.from("membership_spells").insert({
+      membership_id: membership.id,
+      joined_at: now,
+      left_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+    if (spellErr) {
+      await admin.from("memberships").delete().eq("id", membership.id);
+      return { data: null, error: spellErr.message };
+    }
+
+    // They already have working login credentials for their existing
+    // company — no invite email needed. Generate a mobile token for them
+    // from the Team page once they're added.
+    revalidatePath("/team");
+    return { data: { userId: existingUserRow.id }, error: null };
+  }
+
   const baseUserRow = {
     tenant_id: tenantId,
     name: trimmedName || null,
@@ -503,10 +594,14 @@ export async function inviteTeamMember(
 
   if (inviteErr || !invited?.user) {
     if (isAlreadyRegisteredAuthError(inviteErr)) {
+      // We already checked public.users above and found nothing, so this is
+      // a genuinely orphaned auth.users account with no matching profile —
+      // not the normal multi-company case — and needs fixing directly in
+      // Supabase before they can be invited.
       return {
         data: null,
         error:
-          "That email already has a Supabase Auth account. Ask them to sign in, or remove the existing auth user before inviting them.",
+          "That email has an auth account with no matching profile. This needs fixing directly in Supabase before they can be invited.",
       };
     }
 
@@ -526,19 +621,6 @@ export async function inviteTeamMember(
     type: "invite",
     next: "/dashboard",
   });
-
-  const { data: existing } = await admin
-    .from("users")
-    .select("tenant_id")
-    .eq("id", userId)
-    .maybeSingle();
-  if (existing && existing.tenant_id !== tenantId) {
-    await admin.auth.admin.deleteUser(userId);
-    return {
-      data: null,
-      error: "That auth user already belongs to a different tenant.",
-    };
-  }
 
   const { error: upsertErr } = await admin.from("users").upsert(
     {
@@ -580,16 +662,29 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
   if (!access.ok) return { data: null, error: access.error };
   const { supabase, actor } = access;
 
-  const { data: target, error: tErr } = await supabase
+  const { data: targetUser, error: tuErr } = await supabase
     .from("users")
-    .select("id, role, is_active")
+    .select("id, name")
     .eq("id", id)
-    .eq("tenant_id", actor.tenantId)
     .maybeSingle();
-
-  if (tErr || !target) {
-    return { data: null, error: tErr?.message ?? "User not found." };
+  if (tuErr || !targetUser) {
+    return { data: null, error: tuErr?.message ?? "User not found." };
   }
+
+  // Role and active status are scoped to THIS company's membership, not the
+  // global users row — deactivating or changing someone's role here must
+  // never affect their standing at a different company they also work for.
+  const { data: targetMembership, error: tmErr } = await supabase
+    .from("memberships")
+    .select("id, role, status")
+    .eq("user_id", id)
+    .eq("company_id", actor.tenantId)
+    .maybeSingle();
+  if (tmErr || !targetMembership) {
+    return { data: null, error: tmErr?.message ?? "That person is not part of your team." };
+  }
+  const targetRole = targetMembership.role as UserRole;
+  const targetIsActive = targetMembership.status === "active";
 
   if (
     data.name === undefined &&
@@ -603,7 +698,7 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
     return { data: null, error: "You cannot deactivate your own account." };
   }
 
-  if (data.role !== undefined && data.role !== target.role) {
+  if (data.role !== undefined && data.role !== targetRole) {
     if (!ALL_TEAM_ROLES.includes(data.role)) {
       return { data: null, error: "Choose a valid role." };
     }
@@ -613,35 +708,36 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
     if (actor.role !== "owner") {
       return { data: null, error: "Only owners can change roles." };
     }
-    if (target.role === "owner" && data.role !== "owner") {
+    if (targetRole === "owner" && data.role !== "owner") {
       const { count, error: cErr } = await supabase
-        .from("users")
+        .from("memberships")
         .select("id", { count: "exact", head: true })
-        .eq("tenant_id", actor.tenantId)
-        .eq("role", "owner");
+        .eq("company_id", actor.tenantId)
+        .eq("role", "owner")
+        .eq("status", "active");
       if (cErr) return { data: null, error: cErr.message };
       if ((count ?? 0) <= 1) {
-        return { data: null, error: "Cannot remove the last owner from the tenant." };
+        return { data: null, error: "Cannot remove the last owner from this company." };
       }
     }
   }
 
   const activeChanged =
-    data.is_active !== undefined && data.is_active !== target.is_active;
+    data.is_active !== undefined && data.is_active !== targetIsActive;
   if (activeChanged) {
     const permission = getTeamMemberActionPermission({
       action: data.is_active ? "reactivate" : "deactivate",
       actorRole: actor.role,
       actorUserId: actor.userId,
-      targetRole: target.role,
-      targetUserId: target.id,
+      targetRole,
+      targetUserId: id,
     });
     if (!permission.allowed) {
       return { data: null, error: permission.reason };
     }
-    const nextActive = (data.is_active ?? target.is_active) as boolean;
+    const nextActive = (data.is_active ?? targetIsActive) as boolean;
     const membershipResult = await syncTeamMemberMembershipState(
-      target.id,
+      id,
       actor.tenantId,
       nextActive,
     );
@@ -650,46 +746,41 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
     }
   }
 
-  const patch: Partial<UserRow> = {
-    updated_at: new Date().toISOString(),
-  };
+  if (data.role !== undefined && data.role !== targetRole) {
+    // memberships has no UPDATE policy for the plain client — writes go
+    // through the admin client, same as every other membership mutation in
+    // this file, gated by requireTeamManagerAccess having already checked
+    // the actor is owner/office at this company.
+    const admin = createServiceRoleClient();
+    const { error: roleErr } = await admin
+      .from("memberships")
+      .update({ role: data.role, updated_at: new Date().toISOString() })
+      .eq("id", targetMembership.id)
+      .eq("company_id", actor.tenantId);
+    if (roleErr) return { data: null, error: roleErr.message };
+  }
+
+  let updatedName = targetUser.name;
   if (data.name !== undefined) {
-    patch.name = data.name?.trim() ? data.name.trim() : null;
-  }
-  if (data.role !== undefined) {
-    patch.role = data.role;
-  }
-  if (data.is_active !== undefined) {
-    patch.is_active = data.is_active;
+    updatedName = data.name?.trim() ? data.name.trim() : null;
+    const { error: nameErr } = await supabase
+      .from("users")
+      .update({ name: updatedName, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (nameErr) return { data: null, error: nameErr.message };
   }
 
-  const { data: row, error } = await supabase
-    .from("users")
-    .update(patch)
-    .eq("id", id)
-    .eq("tenant_id", actor.tenantId)
-    .select()
-    .single();
-
-  if (error) {
-    if (activeChanged) {
-      const rollback = await syncTeamMemberMembershipState(
-        target.id,
-        actor.tenantId,
-        target.is_active,
-      );
-      if (rollback.error) {
-        console.error("Failed to rollback membership state after team member status update failed.", {
-          userId: id,
-          error: rollback.error,
-        });
-      }
-    }
-    return { data: null, error: error.message };
-  }
   revalidatePath("/team");
   revalidatePath("/", "layout");
-  return { data: row, error: null };
+  return {
+    data: {
+      id,
+      name: updatedName,
+      role: data.role ?? targetRole,
+      is_active: data.is_active ?? targetIsActive,
+    },
+    error: null,
+  };
 }
 
 export async function sendTeamMemberResetEmail(userId: string): Promise<TeamActionResult> {
@@ -799,6 +890,9 @@ async function updateTeamMemberAuthAndProfile(args: {
     return { success: false, error: permission.reason };
   }
 
+  // Company-scoped only — this must never touch the global users row, or
+  // deactivating someone here would deactivate them at every other company
+  // they also work for.
   const membershipResult = await syncTeamMemberMembershipState(
     userId,
     actor.tenantId,
@@ -806,30 +900,6 @@ async function updateTeamMemberAuthAndProfile(args: {
   );
   if (membershipResult.error) {
     return { success: false, error: membershipResult.error };
-  }
-
-  const { error } = await supabase
-    .from("users")
-    .update({
-      is_active: nextActive,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId)
-    .eq("tenant_id", actor.tenantId);
-
-  if (error) {
-    const rollback = await syncTeamMemberMembershipState(
-      userId,
-      actor.tenantId,
-      !nextActive,
-    );
-    if (rollback.error) {
-      console.error("Failed to rollback membership state after team member status update failed.", {
-        userId,
-        error: rollback.error,
-      });
-    }
-    return { success: false, error: error.message };
   }
 
   revalidatePath("/team");
