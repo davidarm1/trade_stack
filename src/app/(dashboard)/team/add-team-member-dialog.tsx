@@ -74,8 +74,11 @@ export function AddTeamMemberDialog() {
               Add user
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Everyone gets an invite email to set their password. Choose a role
-              to control which menus they can use.
+              A new email gets an invite to set their password. If the email
+              already has a Trade Stack account (e.g. a freelancer active at
+              another company), they&apos;re added to your team right away —
+              no email sent, since they already have login details. Choose a
+              role to control which menus they can use.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
