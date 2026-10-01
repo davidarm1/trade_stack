@@ -2,6 +2,7 @@
 const nextConfig = {
   devIndicators: false,
   experimental: {
+    authInterrupts: true,
     serverActions: {
       bodySizeLimit: "4mb",
     },
