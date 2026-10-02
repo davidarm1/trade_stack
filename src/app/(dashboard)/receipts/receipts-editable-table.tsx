@@ -229,6 +229,28 @@ function escapeCSV(v: string | number | null | undefined): string {
   return s;
 }
 
+function ScannerIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <path d="M7 12h10" />
+    </svg>
+  );
+}
+
 /** Renders hover content in a fixed portal so table overflow does not clip it. */
 function LineItemsHoverTrigger({
   ariaLabel,
@@ -300,6 +322,7 @@ function LineItemsHoverTrigger({
         className="relative inline-flex"
         onMouseEnter={show}
         onMouseLeave={hideSoon}
+        onClick={show}
       >
         {trigger}
       </span>
@@ -333,6 +356,8 @@ export function ReceiptsEditableTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [scanActionId, setScanActionId] = useState<string | null>(null);
+  const [scanNotices, setScanNotices] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({
     supplier_name: "",
@@ -496,6 +521,44 @@ export function ReceiptsEditableTable({
       setError("Network error while deleting outgoing.");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function runScanAction(id: string, action: "rescan" | "report") {
+    setScanActionId(id);
+    setScanNotices((n) => ({
+      ...n,
+      [id]: action === "rescan" ? "Rescanning…" : "Sending to helpdesk…",
+    }));
+    try {
+      const res = await fetch(`/api/receipts/${id}/${action}`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setScanNotices((n) => ({
+          ...n,
+          [id]:
+            data.error ??
+            (action === "rescan" ? "Rescan failed." : "Could not send to the helpdesk."),
+        }));
+        return;
+      }
+      if (action === "rescan") {
+        setScanNotices((n) => {
+          const next = { ...n };
+          delete next[id];
+          return next;
+        });
+        router.refresh();
+      } else {
+        setScanNotices((n) => ({
+          ...n,
+          [id]: "Sent to the helpdesk. We'll look into it.",
+        }));
+      }
+    } catch {
+      setScanNotices((n) => ({ ...n, [id]: "Network error. Please try again." }));
+    } finally {
+      setScanActionId(null);
     }
   }
 
@@ -941,22 +1004,52 @@ export function ReceiptsEditableTable({
                   </tbody>
                 </table>
               </LineItemsHoverTrigger>
-            ) : !isEditing && rawItemsPreview ? (
+            ) : !isEditing && r.receipt_url ? (
               <LineItemsHoverTrigger
-                ariaLabel="Line items data"
+                ariaLabel="Receipt not recognised"
                 trigger={
                   <span
-                    aria-label="Show line items JSON"
-                    title="Show line items JSON"
-                    className="inline-flex h-6 w-6 cursor-default items-center justify-center rounded border border-slate-300 bg-white text-[10px] text-slate-700"
+                    aria-label="Receipt not recognised"
+                    className={`inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-amber-300 bg-amber-50 text-amber-700 ${
+                      scanActionId === r.id ? "animate-pulse" : ""
+                    }`}
                   >
-                    {"{}"}
+                    <ScannerIcon />
                   </span>
                 }
               >
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all">
-                  {rawItemsPreview}
-                </pre>
+                <div className="space-y-2">
+                  <p className="font-medium text-slate-900">Items not recognised</p>
+                  <p className="text-slate-600">
+                    The AI couldn&apos;t read line items from this file.
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      disabled={scanActionId === r.id}
+                      onClick={() => void runScanAction(r.id, "rescan")}
+                      className="rounded border border-slate-300 bg-white px-2 py-1.5 text-left text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Try to rescan
+                    </button>
+                    <button
+                      type="button"
+                      disabled={scanActionId === r.id}
+                      onClick={() => void runScanAction(r.id, "report")}
+                      className="rounded border border-slate-300 bg-white px-2 py-1.5 text-left text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Image not recognised – send to helpdesk
+                    </button>
+                  </div>
+                  {scanNotices[r.id] ? (
+                    <p className="text-slate-600">{scanNotices[r.id]}</p>
+                  ) : null}
+                  {rawItemsPreview && rawItemsPreview !== "[]" ? (
+                    <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 text-[10px] text-slate-500">
+                      {rawItemsPreview}
+                    </pre>
+                  ) : null}
+                </div>
               </LineItemsHoverTrigger>
             ) : !isEditing ? (
               "—"

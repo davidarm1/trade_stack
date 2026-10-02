@@ -1,35 +1,25 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
-import OpenAI from "openai";
 import { createHash } from "crypto";
 import { getSessionTenantOrError, rejectForeignTenantId } from "@/lib/api-auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordAiUsage } from "@/lib/ai-usage";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { deleteFromB2ByKey, getSignedDownloadUrl, uploadToB2 } from "@/lib/b2";
 import { b2DownloadPathForKey, normalizeB2ObjectKey } from "@/lib/b2-links";
 import {
-  baselineLineSumForReceipt,
-  parseReceiptLineItems,
-  recalculateAmountsFromLines,
-} from "@/lib/receipt-line-items";
+  extFromName,
+  mimeForExt,
+  parseRequestedPaymentStatus,
+  paymentStatusForSelection,
+  runReceiptOcr,
+  type PaymentStatusSelection,
+} from "@/lib/receipt-ocr";
 
 export const runtime = "nodejs";
 
 /** Allow background upload + OCR to finish on hosts that honor this (e.g. Vercel). */
 export const maxDuration = 300;
-
-const SYSTEM =
-  "You are a receipt parser. Extract data from this receipt or invoice image and return ONLY a JSON object with these fields: supplier_name, date (YYYY-MM-DD), total_amount (number), vat_amount (number or null), payment_status (paid or unpaid), description, currency (default GBP), items (array of line objects or null). Each line object may include: description, quantity, unit_price, total (line gross), net, tax. If the receipt shows multiple product/service lines, fill items; otherwise items can be null. Return null for any field you cannot determine. Return JSON only, no markdown, no explanation.";
-
-function coercePaymentStatus(raw: unknown): "paid" | "unpaid" | null {
-  if (typeof raw !== "string") return null;
-  const status = raw.trim().toLowerCase();
-  if (status === "paid") return "paid";
-  if (status === "unpaid") return "unpaid";
-  return null;
-}
 
 function insufficientPermissions() {
   return NextResponse.json(
@@ -40,74 +30,6 @@ function insufficientPermissions() {
 
 function canManageOutgoings(role: string | null): boolean {
   return role === "owner" || role === "office";
-}
-
-type PaymentStatusSelection =
-  | "paid"
-  | "due_7"
-  | "due_14"
-  | "due_28"
-  | "due_30";
-
-function parseRequestedPaymentStatus(raw: unknown): PaymentStatusSelection {
-  if (typeof raw !== "string") return "paid";
-  const status = raw.trim().toLowerCase();
-  if (
-    status === "paid" ||
-    status === "due_7" ||
-    status === "due_14" ||
-    status === "due_28" ||
-    status === "due_30"
-  ) {
-    return status;
-  }
-  return "paid";
-}
-
-function paymentStatusForSelection(
-  selection: PaymentStatusSelection,
-): "paid" | "unpaid" {
-  return selection === "paid" ? "paid" : "unpaid";
-}
-
-function dueDaysForSelection(selection: PaymentStatusSelection): number | null {
-  if (selection === "due_7") return 7;
-  if (selection === "due_14") return 14;
-  if (selection === "due_28") return 28;
-  if (selection === "due_30") return 30;
-  return null;
-}
-
-function isoDateOrToday(raw: string | null | undefined): string {
-  const d = raw ? new Date(raw) : new Date();
-  if (Number.isNaN(d.getTime())) {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-      .toISOString()
-      .slice(0, 10);
-  }
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
-}
-
-function addDaysUtc(baseIso: string, days: number): string {
-  const d = new Date(`${baseIso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function resolveReceiptPaymentFields(args: {
-  selection: PaymentStatusSelection;
-  invoiceDate?: string | null;
-}): { payment_status: "paid" | "unpaid"; due_date: string | null } {
-  const payment_status = paymentStatusForSelection(args.selection);
-  const dueDays = dueDaysForSelection(args.selection);
-  if (payment_status === "paid" || dueDays == null) {
-    return { payment_status, due_date: null };
-  }
-  const base = isoDateOrToday(args.invoiceDate);
-  return { payment_status, due_date: addDaysUtc(base, dueDays) };
 }
 
 type LinkedReceiptContext = {
@@ -205,300 +127,6 @@ async function validateLinkedJobContext(args: {
   }
 
   return { ok: true, context: { jobId, clientId } };
-}
-
-type Parsed = {
-  supplier_name: string | null;
-  date: string | null;
-  total_amount: number | null;
-  vat_amount: number | null;
-  payment_status: "paid" | "unpaid" | null;
-  description: string | null;
-  currency: string | null;
-  items: unknown[] | null;
-};
-
-function extFromName(name: string): string {
-  const i = name.lastIndexOf(".");
-  if (i < 0) return "bin";
-  return (
-    name
-      .slice(i + 1)
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "") || "bin"
-  );
-}
-
-function mimeForExt(ext: string): string {
-  if (ext === "pdf") return "application/pdf";
-  if (ext === "png") return "image/png";
-  if (ext === "webp") return "image/webp";
-  if (ext === "gif") return "image/gif";
-  return "image/jpeg";
-}
-
-async function runReceiptOcrAfterUpload(args: {
-  supabase: SupabaseClient;
-  receiptId: string;
-  tenantId: string;
-  buf: Buffer;
-  ext: string;
-  mime: string;
-  fileName: string;
-  isPdf: boolean;
-  url: string;
-  requestedPaymentStatus: PaymentStatusSelection;
-}) {
-  const {
-    supabase,
-    receiptId,
-    tenantId,
-    buf,
-    ext,
-    mime,
-    fileName,
-    isPdf,
-    url,
-    requestedPaymentStatus,
-  } = args;
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error("[scan-receipt] OPENAI_API_KEY missing in background OCR");
-    return;
-  }
-
-  const openai = new OpenAI({ apiKey });
-  const model = "gpt-4o-mini";
-
-  console.log("[scan-receipt] OCR starting", {
-    receiptId,
-    tenantId,
-    fileName,
-    mime,
-    isPdf,
-    url,
-    requestedPaymentStatus,
-  });
-
-  let parsed: Parsed = {
-    supplier_name: null,
-    date: null,
-    total_amount: null,
-    vat_amount: null,
-    payment_status: null,
-    description: null,
-    currency: "GBP",
-    items: null,
-  };
-  let scanConfidence: "high" | "low" | "failed" = "failed";
-  let promptTokens: number | null = null;
-  let completionTokens: number | null = null;
-  let totalTokens: number | null = null;
-
-  let completionRaw = "";
-  try {
-    if (isPdf) {
-      const resp = await openai.responses.create({
-        model,
-        input: [
-          {
-            role: "system",
-            content: SYSTEM,
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: "Extract structured data from this receipt/invoice PDF.",
-              },
-              {
-                type: "input_file",
-                filename: fileName,
-                file_data: `data:${mime};base64,${buf.toString("base64")}`,
-              },
-            ],
-          },
-        ],
-      } as never);
-      promptTokens = resp.usage?.input_tokens ?? null;
-      completionTokens = resp.usage?.output_tokens ?? null;
-      totalTokens = resp.usage?.total_tokens ?? null;
-      completionRaw = resp.output_text ?? "";
-    } else {
-      const completion = await openai.chat.completions.create({
-        model,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract structured data from this receipt image.",
-              },
-              {
-                type: "image_url",
-                image_url: { url, detail: "high" },
-              },
-            ],
-          },
-        ],
-      });
-      const usage = completion.usage;
-      promptTokens = usage?.prompt_tokens ?? null;
-      completionTokens = usage?.completion_tokens ?? null;
-      totalTokens = usage?.total_tokens ?? null;
-      completionRaw = completion.choices[0]?.message?.content ?? "";
-    }
-  } catch (e) {
-    console.error("[scan-receipt] OpenAI request failed:", e);
-    completionRaw = "";
-  }
-
-  console.log("[scan-receipt] OCR response received", {
-    receiptId,
-    hasOutput: completionRaw.length > 0,
-    promptTokens,
-    completionTokens,
-    totalTokens,
-  });
-
-  if (completionRaw) {
-    try {
-      const obj = JSON.parse(completionRaw) as Record<string, unknown>;
-      const rawItems = obj.items;
-      parsed = {
-        supplier_name:
-          typeof obj.supplier_name === "string" ? obj.supplier_name : null,
-        date: typeof obj.date === "string" ? obj.date : null,
-        total_amount:
-          typeof obj.total_amount === "number" ? obj.total_amount : null,
-        vat_amount: typeof obj.vat_amount === "number" ? obj.vat_amount : null,
-        description:
-          typeof obj.description === "string" ? obj.description : null,
-        currency: typeof obj.currency === "string" ? obj.currency : "GBP",
-        payment_status: coercePaymentStatus(obj.payment_status),
-        items: Array.isArray(rawItems) ? rawItems : null,
-      };
-      const hasAny =
-        parsed.supplier_name ||
-        parsed.date ||
-        parsed.total_amount != null ||
-        parsed.description ||
-        (parsed.items && parsed.items.length > 0);
-      scanConfidence = hasAny ? "high" : "low";
-    } catch {
-      parsed = {
-        supplier_name: null,
-        date: null,
-        total_amount: null,
-        vat_amount: null,
-        payment_status: null,
-        description: null,
-        currency: "GBP",
-        items: null,
-      };
-      scanConfidence = "failed";
-    }
-  } else {
-    parsed = {
-      supplier_name: null,
-      date: null,
-      total_amount: null,
-      vat_amount: null,
-      payment_status: null,
-      description: null,
-      currency: "GBP",
-      items: null,
-    };
-    scanConfidence = "failed";
-  }
-
-  // Metering failure is logged inside recordAiUsage; do not fail the receipt scan.
-  await recordAiUsage({
-    supabase,
-    tenantId,
-    feature: "receipt_scan",
-    model,
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: totalTokens,
-    },
-    logLabel: "[scan-receipt]",
-  });
-
-  const aiConfidence =
-    scanConfidence === "high" ? 0.9 : scanConfidence === "low" ? 0.45 : null;
-
-  const notesFromOcr =
-    typeof parsed?.description === "string" && parsed.description.trim()
-      ? parsed.description.trim()
-      : null;
-
-  const lineItemsNormalized = parseReceiptLineItems(parsed?.items ?? []);
-  const baseline = {
-    lineSum: baselineLineSumForReceipt({
-      line_items: lineItemsNormalized,
-      amount_total: parsed?.total_amount ?? null,
-    }),
-    amount_tax: parsed?.vat_amount ?? null,
-    amount_net:
-      parsed?.total_amount != null && parsed?.vat_amount != null
-        ? parsed.total_amount - parsed.vat_amount
-        : null,
-    amount_total: parsed?.total_amount ?? null,
-  };
-  const amountsFromLines =
-    lineItemsNormalized.length > 0
-      ? recalculateAmountsFromLines(lineItemsNormalized, baseline)
-      : null;
-
-  const now = new Date().toISOString();
-  const { error: updateErr } = await supabase
-    .from("receipts")
-    .update({
-      supplier_name: parsed?.supplier_name ?? null,
-      invoice_date: parsed?.date ?? null,
-      amount_total:
-        amountsFromLines?.amount_total ?? parsed?.total_amount ?? null,
-      amount_tax: amountsFromLines?.amount_tax ?? parsed?.vat_amount ?? null,
-      amount_net:
-        amountsFromLines?.amount_net ??
-        (parsed?.total_amount != null && parsed?.vat_amount != null
-          ? parsed.total_amount - parsed.vat_amount
-          : null),
-      line_items: lineItemsNormalized,
-      notes: notesFromOcr,
-      currency: parsed?.currency ?? "GBP",
-      ...resolveReceiptPaymentFields({
-        selection: requestedPaymentStatus,
-        invoiceDate: parsed?.date ?? null,
-      }),
-      processed_by_ai: true,
-      ai_processed_at: now,
-      ai_confidence: aiConfidence,
-      updated_at: now,
-    })
-    .eq("id", receiptId)
-    .eq("tenant_id", tenantId);
-
-  if (updateErr) {
-    console.error(
-      "[scan-receipt] receipt OCR update failed:",
-      updateErr.message,
-    );
-  } else {
-    console.log("[scan-receipt] receipt OCR update complete", {
-      receiptId,
-      scanConfidence,
-      supplierName: parsed?.supplier_name ?? null,
-      totalAmount: parsed?.total_amount ?? null,
-    });
-  }
 }
 
 async function processReceiptUploadInBackground(args: {
@@ -616,12 +244,11 @@ async function processReceiptUploadInBackground(args: {
 
   const downloadUrl = await getSignedDownloadUrl(key);
 
-  await runReceiptOcrAfterUpload({
+  await runReceiptOcr({
     supabase: supa,
     receiptId: receiptRow.id,
     tenantId,
     buf,
-    ext,
     mime,
     fileName,
     isPdf,
@@ -737,12 +364,11 @@ async function processUploadedObjectInBackground(args: {
     return;
   }
 
-  await runReceiptOcrAfterUpload({
+  await runReceiptOcr({
     supabase: supa,
     receiptId: receiptRow.id,
     tenantId,
     buf,
-    ext,
     mime,
     fileName,
     isPdf: ext === "pdf" || mime === "application/pdf",
