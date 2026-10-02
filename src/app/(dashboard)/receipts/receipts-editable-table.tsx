@@ -5,6 +5,7 @@ import {
   Fragment,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -262,8 +263,9 @@ function LineItemsHoverTrigger({
   children: ReactNode;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, maxHeight: 320 });
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function clearHideTimer() {
@@ -277,9 +279,23 @@ function LineItemsHoverTrigger({
     const el = anchorRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    const margin = 8;
+    const gap = 6;
     const panelWidth = Math.min(28 * 16, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - panelWidth - 8));
-    setPos({ top: r.bottom + 6, left });
+    const left = Math.max(margin, Math.min(r.left, window.innerWidth - panelWidth - margin));
+    const spaceBelow = window.innerHeight - r.bottom - gap - margin;
+    const spaceAbove = r.top - gap - margin;
+    const needed = panelRef.current?.offsetHeight ?? 180;
+    const openAbove = spaceBelow < needed && spaceAbove > spaceBelow;
+    const available = Math.max(80, openAbove ? spaceAbove : spaceBelow);
+    const top = openAbove
+      ? Math.max(margin, r.top - gap - Math.min(needed, available))
+      : r.bottom + gap;
+    setPos((prev) =>
+      prev.top === top && prev.left === left && prev.maxHeight === available
+        ? prev
+        : { top, left, maxHeight: available },
+    );
   }
 
   function show() {
@@ -301,6 +317,11 @@ function LineItemsHoverTrigger({
       }
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    placePanel();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -330,10 +351,11 @@ function LineItemsHoverTrigger({
         open &&
         createPortal(
           <div
+            ref={panelRef}
             role="tooltip"
             aria-label={ariaLabel}
-            className="pointer-events-auto fixed z-[100] max-h-[min(70vh,24rem)] w-[min(28rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-xl"
-            style={{ top: pos.top, left: pos.left }}
+            className="pointer-events-auto fixed z-[100] w-[min(28rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-xl"
+            style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
             onMouseEnter={show}
             onMouseLeave={hideSoon}
           >
