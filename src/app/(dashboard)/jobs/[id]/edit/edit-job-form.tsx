@@ -176,27 +176,29 @@ export function EditJobForm({
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Date onsite
-          </label>
-          <input
-            name="date_onsite"
-            type="date"
-            defaultValue={initial.date_onsite ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Time onsite
-          </label>
-          <input
-            name="time_onsite"
-            type="time"
-            defaultValue={initial.time_onsite ?? ""}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
+        <div className="flex flex-wrap gap-4 sm:col-span-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              Date onsite
+            </label>
+            <input
+              name="date_onsite"
+              type="date"
+              defaultValue={initial.date_onsite ?? ""}
+              className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              Time onsite
+            </label>
+            <input
+              name="time_onsite"
+              type="time"
+              defaultValue={initial.time_onsite ?? ""}
+              className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
         </div>
       </div>
 
