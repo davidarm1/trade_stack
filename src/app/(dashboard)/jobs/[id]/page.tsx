@@ -1,3 +1,4 @@
+import { formatTimeOnsite } from "@/lib/time-onsite";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -303,7 +304,7 @@ export default async function Page({
               <div>
                 <dt className="text-slate-500">Time onsite</dt>
                 <dd className="text-slate-900">
-                  {String(j.time_onsite ?? "—")}
+                  {formatTimeOnsite(j.time_onsite) || "—"}
                 </dd>
               </div>
             </dl>
@@ -318,7 +319,7 @@ export default async function Page({
                   description: String(j.description ?? ""),
                   date_onsite:
                     typeof j.date_onsite === "string" ? j.date_onsite : "",
-                  time_onsite: String(j.time_onsite ?? ""),
+                  time_onsite: formatTimeOnsite(j.time_onsite),
                 }}
               />
             </div>

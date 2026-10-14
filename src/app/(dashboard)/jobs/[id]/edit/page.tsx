@@ -1,3 +1,4 @@
+import { formatTimeOnsite } from "@/lib/time-onsite";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob } from "@/actions/jobs";
@@ -72,7 +73,7 @@ export default async function EditJobPage({
           status: job.status,
           assigned_engineer_membership_id: job.assigned_engineer_membership_id,
           date_onsite: job.date_onsite,
-          time_onsite: job.time_onsite,
+          time_onsite: formatTimeOnsite(job.time_onsite) || null,
           site_address1: job.site_address1,
           site_address2: job.site_address2,
           site_town: job.site_town,

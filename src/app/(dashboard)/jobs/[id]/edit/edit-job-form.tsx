@@ -193,7 +193,7 @@ export function EditJobForm({
           </label>
           <input
             name="time_onsite"
-            placeholder="e.g. 2pm, or 9-11am"
+            placeholder="e.g. 2pm, 2:30pm or 14:30"
             defaultValue={initial.time_onsite ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />

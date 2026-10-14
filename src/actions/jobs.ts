@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeTimeOnsite } from "@/lib/time-onsite";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { jobMatchesSearch } from "@/lib/job-number";
@@ -99,6 +100,11 @@ export async function createJob(data: JobInsert) {
     };
   }
 
+  // time_onsite is a Postgres `time` column; the form accepts "2pm" etc.
+  const timeOnsite = normalizeTimeOnsite(rest.time_onsite);
+  if (timeOnsite.error) return { data: null, error: timeOnsite.error };
+  rest.time_onsite = timeOnsite.value;
+
   const { jobNumber, error: allocErr } = await allocateNextJobNumber();
   if (allocErr || jobNumber == null) {
     return { data: null, error: allocErr ?? "Could not allocate job number" };
@@ -147,6 +153,12 @@ export async function updateJob(id: string, data: JobInsert) {
   const supabase = await createClient();
 
   const { job_number: _omitImmutable, ...safe } = data;
+
+  if ("time_onsite" in safe) {
+    const timeOnsite = normalizeTimeOnsite(safe.time_onsite);
+    if (timeOnsite.error) return { data: null, error: timeOnsite.error };
+    safe.time_onsite = timeOnsite.value;
+  }
 
   // Unassigning an engineer must also clear sent/received timestamps —
   // the jobs_sent_requires_assigned_engineer constraint forbids a sent job with no engineer.
