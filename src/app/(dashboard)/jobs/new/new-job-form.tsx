@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeTimeOnsite } from "@/lib/time-onsite";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient, searchClients } from "@/actions/clients";
@@ -640,8 +641,8 @@ export function NewJobForm({
         </label>
         <input
           name="time_onsite"
-          placeholder="e.g. 2pm, 2:30pm or 14:30"
-          defaultValue={prefill?.time_onsite ?? ""}
+          type="time"
+          defaultValue={normalizeTimeOnsite(prefill?.time_onsite).value ?? ""}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>

@@ -92,7 +92,7 @@ export function JobDetailsEditor({
           Time onsite
           <input
             className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-            placeholder="e.g. 2pm, 2:30pm or 14:30"
+            type="time"
             value={fields.time_onsite}
             onChange={(e) => setFields((f) => ({ ...f, time_onsite: e.target.value }))}
           />
