@@ -86,6 +86,50 @@ async function resolveDefaultVatRate(
   return vatRegistered ? Number(tenantRow?.default_vat_rate ?? 0) || 0 : 0;
 }
 
+/**
+ * The live jobs table still carries the legacy `assigned_engineer_id` (user
+ * id) column, and the mobile app's jobs SELECT policy filters engineer
+ * visibility on it (`assigned_engineer_id = auth.uid()`). The membership-id
+ * cleanup migration for jobs hasn't run against production yet, so EVERY write
+ * of assigned_engineer_membership_id must mirror the resolved user id into
+ * assigned_engineer_id — otherwise the job is invisible to the engineer on the
+ * phone app (this is exactly the /jobs/new vs "Save engineer" discrepancy).
+ * Returns the user id, or an error when the membership can't be resolved.
+ */
+async function resolveLegacyAssignedEngineerUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  membershipId: unknown,
+): Promise<{ userId: string | null; error: string | null }> {
+  if (
+    membershipId === null ||
+    membershipId === undefined ||
+    membershipId === ""
+  ) {
+    return { userId: null, error: null };
+  }
+  if (typeof membershipId !== "string") {
+    return {
+      userId: null,
+      error: "Could not resolve the selected engineer's account.",
+    };
+  }
+  const { data: membership, error } = await supabase
+    .from("memberships")
+    .select("user_id")
+    .eq("id", membershipId)
+    .eq("company_id", tenantId)
+    .maybeSingle();
+  if (error) return { userId: null, error: error.message };
+  if (!membership?.user_id) {
+    return {
+      userId: null,
+      error: "Could not resolve the selected engineer's account.",
+    };
+  }
+  return { userId: membership.user_id, error: null };
+}
+
 export async function createJob(data: JobInsert) {
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
@@ -117,12 +161,22 @@ export async function createJob(data: JobInsert) {
   // error. Edit invoice details (or line items) once the real cost is known.
   const labour_charge = rest.labour_charge ?? 0;
 
+  // Mirror the membership id into the legacy assigned_engineer_id column so
+  // the phone app's engineer-visibility SELECT policy can see the job.
+  const legacy = await resolveLegacyAssignedEngineerUserId(
+    supabase,
+    ctx.tenantId,
+    rest.assigned_engineer_membership_id,
+  );
+  if (legacy.error) return { data: null, error: legacy.error };
+
   const { data: row, error } = await supabase
     .from("jobs")
     .insert({
       ...rest,
       vat_rate,
       labour_charge,
+      assigned_engineer_id: legacy.userId,
       tenant_id: ctx.tenantId,
       created_by_id: ctx.userId,
       created_by_membership_id: ctx.membershipId ?? null,
@@ -168,26 +222,18 @@ export async function updateJob(id: string, data: JobInsert) {
   }
 
   // The live jobs table still carries the legacy assigned_engineer_id
-  // column (user id) and a CHECK constraint tying it to sent_to_engineer_at
+  // (user id) column and a CHECK constraint tying it to sent_to_engineer_at
   // — the membership_id-only cleanup migration for jobs hasn't actually run
   // against production yet (mirrors the mobile_access_tokens.user_id gap).
   // Keep it in sync from the membership id until that migration lands.
-  if (
-    "assigned_engineer_membership_id" in safe &&
-    typeof safe.assigned_engineer_membership_id === "string" &&
-    safe.assigned_engineer_membership_id
-  ) {
-    const { data: membership, error: membershipError } = await supabase
-      .from("memberships")
-      .select("user_id")
-      .eq("id", safe.assigned_engineer_membership_id)
-      .eq("company_id", ctx.tenantId)
-      .maybeSingle();
-    if (membershipError) return { data: null, error: membershipError.message };
-    if (!membership?.user_id) {
-      return { data: null, error: "Could not resolve the selected engineer's account." };
-    }
-    (safe as Record<string, unknown>).assigned_engineer_id = membership.user_id;
+  if ("assigned_engineer_membership_id" in safe) {
+    const legacy = await resolveLegacyAssignedEngineerUserId(
+      supabase,
+      ctx.tenantId,
+      safe.assigned_engineer_membership_id,
+    );
+    if (legacy.error) return { data: null, error: legacy.error };
+    (safe as Record<string, unknown>).assigned_engineer_id = legacy.userId;
   }
 
   // vat_rate and labour_charge are NOT NULL — clearing either field back to
@@ -1080,13 +1126,15 @@ export async function getJobs(options?: { search?: string }) {
 
   let engineers: Record<string, { id: string; name: string | null }> = {};
   if (engineerIds.length > 0) {
+    // engineerIds are memberships.id values (assigned_engineer_membership_id),
+    // so resolve names from memberships.display_name, not users.
     const { data: engRows } = await supabase
-      .from("users")
-      .select("id, name")
-      .eq("tenant_id", ctx.tenantId)
+      .from("memberships")
+      .select("id, display_name")
+      .eq("company_id", ctx.tenantId)
       .in("id", engineerIds);
     engineers = Object.fromEntries(
-      (engRows ?? []).map((e) => [e.id, e]),
+      (engRows ?? []).map((e) => [e.id, { id: e.id, name: e.display_name }]),
     );
   }
 
