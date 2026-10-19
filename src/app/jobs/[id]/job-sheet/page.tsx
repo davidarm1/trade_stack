@@ -3,7 +3,7 @@ import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { resolveLabourLabel } from "@/lib/labour-label";
 import { createClient } from "@/lib/supabase/server";
 import { formatJobRefFormal } from "@/lib/job-number";
-import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
+import { b2DownloadPathFromStoredValue, clientFileUrl } from "@/lib/b2-links";
 import { JobSheetView } from "./job-sheet-view";
 
 function opt(value: unknown): string | null {
@@ -42,6 +42,7 @@ export default async function JobSheetStandalonePage({
     { data: materials },
     { data: engineer },
     { data: completion },
+    { data: images },
   ] = await Promise.all([
     supabase.from("tenants").select("*").eq("id", job.tenant_id).maybeSingle(),
     supabase.from("settings").select("field_key, field_value").eq("tenant_id", job.tenant_id),
@@ -63,6 +64,12 @@ export default async function JobSheetStandalonePage({
       .eq("job_id", id)
       .eq("tenant_id", job.tenant_id)
       .maybeSingle(),
+    supabase
+      .from("job_images")
+      .select("id, image_url, image_name")
+      .eq("job_id", id)
+      .eq("tenant_id", job.tenant_id)
+      .order("uploaded_at", { ascending: true }),
   ]);
 
   const settings = Object.fromEntries(
@@ -175,6 +182,16 @@ export default async function JobSheetStandalonePage({
         }
         startTime={opt((completion as { start_time?: string | null } | null)?.start_time)}
         finishTime={opt((completion as { finish_time?: string | null } | null)?.finish_time)}
+        photos={(images ?? []).map((image) => {
+          const stored = String(image.image_url ?? "");
+          return {
+            name: opt(image.image_name),
+            previewUrl:
+              b2DownloadPathFromStoredValue(stored) ??
+              (/^https?:\/\//i.test(stored) ? stored : null),
+            publicUrl: clientFileUrl(stored),
+          };
+        })}
       />
     </>
   );

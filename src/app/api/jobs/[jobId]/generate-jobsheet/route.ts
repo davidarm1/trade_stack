@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFFont, PDFImage, PDFName, PDFPage, PDFString, StandardFonts, rgb } from "pdf-lib";
 import {
   getSessionTenantOrError,
   rejectForeignTenantId,
 } from "@/lib/api-auth";
 import { uploadToB2, getSignedDownloadUrl } from "@/lib/b2";
-import { normalizeB2ObjectKey } from "@/lib/b2-links";
+import { clientFileUrl, normalizeB2ObjectKey } from "@/lib/b2-links";
 import { resolveBrandingFromSettings } from "@/lib/branding-settings";
 import { resolveLabourLabel } from "@/lib/labour-label";
 import { fetchLogoBytes } from "@/lib/fetch-logo-bytes";
@@ -22,6 +22,7 @@ const ORANGE     = rgb(232 / 255, 118 / 255, 61 / 255);  // #E8763D
 const LIGHT_GREY = rgb(245 / 255, 246 / 255, 248 / 255);
 const BORDER     = rgb(220 / 255, 224 / 255, 230 / 255);
 const TEXT       = rgb(30 / 255, 41 / 255, 59 / 255);
+const LINK       = rgb(30 / 255, 90 / 255, 168 / 255);
 const WHITE      = rgb(1, 1, 1);
 
 function str(value: unknown, fallback = "—"): string {
@@ -32,6 +33,59 @@ function str(value: unknown, fallback = "—"): string {
 function opt(value: unknown): string | null {
   const s = String(value ?? "").trim();
   return s || null;
+}
+
+function pdfAscii(value: string): string {
+  return value.replace(/[^\x20-\x7E]/g, "");
+}
+
+function wrapByWidth(value: string, maxWidth: number, font: PDFFont, size: number): string[] {
+  const raw = pdfAscii(value).trim();
+  if (!raw) return [];
+  const lines: string[] = [];
+  let current = "";
+  for (const ch of raw) {
+    const next = current + ch;
+    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+      current = next;
+    } else {
+      if (current) lines.push(current);
+      current = ch.trim() ? ch : "";
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function addUriLink(args: {
+  pdf: PDFDocument;
+  page: PDFPage;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
+  const annot = args.pdf.context.register(
+    args.pdf.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: [args.x, args.y, args.x + args.width, args.y + args.height],
+      Border: [0, 0, 0],
+      A: {
+        Type: "Action",
+        S: "URI",
+        URI: PDFString.of(args.url),
+      },
+    }),
+  );
+  const key = PDFName.of("Annots");
+  const existing = args.page.node.lookup(key);
+  if (existing instanceof PDFArray) {
+    existing.push(annot);
+  } else {
+    args.page.node.set(key, args.pdf.context.obj([annot]));
+  }
 }
 
 function wrapText(value: string, maxWidth: number, font: PDFFont, size: number): string[] {
@@ -505,41 +559,95 @@ async function buildJobSheetPdf(args: {
   }
 
   // ── Photos — always start on a new page ───────────────────────────────────
-  const photoImages = (
-    await Promise.all(
-      (images ?? []).map((img) =>
-        embedRemoteImage(pdf, img.image_url, str(img.image_name, "Photo")),
-      ),
-    )
-  ).filter(Boolean) as PdfImageResult[];
+  // Public links are printed even when the image itself cannot be embedded,
+  // so a client opening the PDF can still view the full photo.
+  const photoRows = (images ?? [])
+    .map((img, index) => {
+      const stored = String(img.image_url ?? "").trim();
+      const label = pdfAscii(str(img.image_name, `Photo ${index + 1}`)).slice(0, 44);
+      return {
+        label,
+        stored,
+        publicUrl: clientFileUrl(stored),
+      };
+    })
+    .filter((row) => row.stored);
+  const embeddedPhotos = await Promise.all(
+    photoRows.map((row) => embedRemoteImage(pdf, row.stored, row.label)),
+  );
 
-  if (photoImages.length > 0) {
+  if (photoRows.length > 0) {
     addPage();
     page.drawText("ENGINEER WORK PHOTOS", { x: MARGIN, y, size: 9, font: bold, color: NAVY });
     y -= 11;
     page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: BORDER });
-    y -= 20;
+    y -= 16;
+    page.drawText("Open a link to view the full photo.", {
+      x: MARGIN,
+      y,
+      size: 8.5,
+      font,
+      color: TEXT,
+    });
+    y -= 18;
 
-    const gap    = 14;
+    const gap = 14;
     const photoW = (CONTENT_W - gap) / 2;
-    const photoH = 160;
+    const imageH = 148;
+    const linkSize = 7;
 
-    for (let i = 0; i < photoImages.length; i += 2) {
-      ensureSpace(photoH + 30);
-      const row = photoImages.slice(i, i + 2);
+    for (let i = 0; i < photoRows.length; i += 2) {
+      const row = photoRows.slice(i, i + 2);
+      const linkLines = row.map((photo) =>
+        photo.publicUrl ? wrapByWidth(photo.publicUrl, photoW - 8, font, linkSize) : [],
+      );
+      const linkBlock = Math.max(1, ...linkLines.map((lines) => lines.length)) * (linkSize + 2);
+      const blockH = imageH + 16 + linkBlock + 18;
+      ensureSpace(blockH);
+      const rowPage = page;
+
       row.forEach((photo, idx) => {
         const x = MARGIN + idx * (photoW + gap);
-        page.drawRectangle({ x, y: y - photoH, width: photoW, height: photoH, borderColor: BORDER, borderWidth: 1 });
-        drawContainedImage(photo.image, x + 4, y - 4, photoW - 8, photoH - 26);
-        page.drawText(photo.label.slice(0, 44), {
+        const image = embeddedPhotos[i + idx]?.image ?? null;
+        rowPage.drawRectangle({
+          x,
+          y: y - imageH,
+          width: photoW,
+          height: imageH,
+          borderColor: BORDER,
+          borderWidth: 1,
+        });
+        if (image) {
+          drawContainedImage(image, x + 4, y - 4, photoW - 8, imageH - 8);
+        }
+        const labelY = y - imageH - 14;
+        rowPage.drawText(photo.label || `Photo ${i + idx + 1}`, {
           x: x + 4,
-          y: y - photoH + 8,
+          y: labelY,
           size: 8,
           font,
           color: TEXT,
         });
+        const lines = linkLines[idx] ?? [];
+        if (photo.publicUrl && lines.length > 0) {
+          let linkY = labelY - 12;
+          const top = linkY + linkSize;
+          for (const line of lines) {
+            rowPage.drawText(line, { x: x + 4, y: linkY, size: linkSize, font, color: LINK });
+            linkY -= linkSize + 2;
+          }
+          addUriLink({
+            pdf,
+            page: rowPage,
+            url: photo.publicUrl,
+            x,
+            y: linkY + 2,
+            width: photoW,
+            height: top - (linkY + 2),
+          });
+        }
       });
-      y -= photoH + 14;
+      y -= blockH;
     }
   }
 
@@ -633,18 +741,55 @@ export async function POST(
   const key = `tradestack/${tenantId}/jobsheets/${jobId}.pdf`;
   await uploadToB2(buffer, key, "application/pdf");
   const downloadUrl = `/api/files/download?key=${encodeURIComponent(key)}`;
+  const now = new Date().toISOString();
 
-  const { error: fileErr } = await supabase.from("tenant_files").insert({
-    tenant_id: tenantId,
+  const { data: existingRows, error: existingErr } = await supabase
+    .from("tenant_files")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("b2_key", key)
+    .is("deleted_at", null)
+    .order("uploaded_at", { ascending: false });
+
+  if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 });
+
+  const [current, ...stale] = existingRows ?? [];
+  const fileRow = {
     job_id: jobId,
     file_type: "jobsheet",
-    b2_key: key,
     file_name: fileName,
     file_size_bytes: buffer.length,
     public_url: key,
-  });
+    uploaded_at: now,
+  };
 
-  if (fileErr) return NextResponse.json({ error: fileErr.message }, { status: 500 });
+  if (current) {
+    const { error: updateErr } = await supabase
+      .from("tenant_files")
+      .update(fileRow)
+      .eq("id", current.id)
+      .eq("tenant_id", tenantId);
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  } else {
+    const { error: fileErr } = await supabase.from("tenant_files").insert({
+      tenant_id: tenantId,
+      b2_key: key,
+      ...fileRow,
+    });
+    if (fileErr) return NextResponse.json({ error: fileErr.message }, { status: 500 });
+  }
+
+  if (stale.length > 0) {
+    const { error: retireErr } = await supabase
+      .from("tenant_files")
+      .update({ deleted_at: now })
+      .in(
+        "id",
+        stale.map((row) => row.id),
+      )
+      .eq("tenant_id", tenantId);
+    if (retireErr) return NextResponse.json({ error: retireErr.message }, { status: 500 });
+  }
 
   const { error: updErr } = await supabase
     .from("jobs")

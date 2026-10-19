@@ -54,6 +54,23 @@ export function publicUrlFromStoredValue(value: string | null | undefined): stri
   return key ? publicUrlForB2Key(key) : null;
 }
 
+/**
+ * Client-facing URL for a stored file. Prefers the public B2 URL derived from
+ * a key or legacy download path, and otherwise keeps an already-absolute URL.
+ */
+export function clientFileUrl(value: string | null | undefined): string | null {
+  const stored = String(value ?? "").trim();
+  if (!stored) return null;
+  try {
+    const fromKey = publicUrlFromStoredValue(stored);
+    if (fromKey) return fromKey;
+  } catch {
+    // Public B2 base is not configured in this process.
+  }
+  if (/^https?:\/\//i.test(stored)) return stored;
+  return null;
+}
+
 export function b2KeyFromPublicUrl(publicUrl: string): string | null {
   const trimmed = String(publicUrl ?? "").trim();
   if (!trimmed) return null;

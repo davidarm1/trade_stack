@@ -28,17 +28,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: file, error } = await session.supabase
+  // The same B2 key is reused when a job sheet or signature is saved again.
+  // Older saves left extra tenant_files rows, and maybeSingle() then fails
+  // with "multiple (or no) rows returned". Use the latest live row.
+  const { data: files, error } = await session.supabase
     .from("tenant_files")
     .select("id, job_id, file_type, b2_key")
     .eq("tenant_id", session.tenantId)
     .eq("b2_key", key)
     .is("deleted_at", null)
-    .maybeSingle();
+    .order("uploaded_at", { ascending: false })
+    .limit(1);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  const file = files?.[0];
   if (!file) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
