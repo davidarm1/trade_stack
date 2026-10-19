@@ -294,24 +294,24 @@ export function JobSheetView(props: JobSheetViewProps) {
             <ul className="mt-4 space-y-5">
               {photos.map((photo, idx) => {
                 const href = photo.publicUrl || photo.previewUrl;
-                const label = photo.name?.trim() || `Photo ${idx + 1}`;
+                const label = "Full size image link, click below";
                 return (
                   <li key={`${label}-${idx}`} className="break-inside-avoid">
-                    <p className="text-sm font-medium text-slate-800">{label}</p>
                     {photo.previewUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={photo.previewUrl}
-                        alt={label}
-                        className="mt-2 max-h-64 w-auto rounded border border-slate-200 bg-slate-50 object-contain"
+                        alt={photo.name?.trim() || `Photo ${idx + 1}`}
+                        className="max-h-64 w-auto rounded border border-slate-200 bg-slate-50 object-contain"
                       />
                     ) : null}
+                    <p className="mt-2 text-sm font-medium text-slate-800">{label}</p>
                     {href ? (
                       <a
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 block break-all text-sm text-[#1e5aa8] underline"
+                        className="mt-1 block break-all text-sm text-[#1e5aa8] underline"
                       >
                         {photo.publicUrl || href}
                       </a>

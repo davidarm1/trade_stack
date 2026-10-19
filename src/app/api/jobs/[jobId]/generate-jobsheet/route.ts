@@ -562,11 +562,10 @@ async function buildJobSheetPdf(args: {
   // Public links are printed even when the image itself cannot be embedded,
   // so a client opening the PDF can still view the full photo.
   const photoRows = (images ?? [])
-    .map((img, index) => {
+    .map((img) => {
       const stored = String(img.image_url ?? "").trim();
-      const label = pdfAscii(str(img.image_name, `Photo ${index + 1}`)).slice(0, 44);
       return {
-        label,
+        label: "Full size image link, click below",
         stored,
         publicUrl: clientFileUrl(stored),
       };
