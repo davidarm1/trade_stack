@@ -433,9 +433,12 @@ export async function replaceJobInvoiceMaterials(
   if (oldErr) return { data: null, error: oldErr.message };
 
   if (normalized.length > 0) {
+    // .select() makes Postgres apply the SELECT policy to the new rows too, so
+    // rows the user couldn't read back fail loudly instead of saving invisibly.
     const { error: insErr } = await supabase
       .from("job_materials")
-      .insert(normalized as never[]);
+      .insert(normalized as never[])
+      .select("id");
     if (insErr) return { data: null, error: insErr.message };
   }
 
@@ -459,6 +462,76 @@ export async function replaceJobInvoiceMaterials(
   revalidatePath(`/jobs/${id}`);
   revalidatePath(`/jobs/${id}/invoice`);
   return { data: true, error: null };
+}
+
+/**
+ * Append line items by description, skipping any the job already has. The
+ * existing rows are read here (not trusted from the client) so repeated clicks
+ * or stale UI state can't create duplicates.
+ */
+export async function appendJobInvoiceMaterials(id: string, descriptions: string[]) {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const { data: existing, error: exErr } = await supabase
+    .from("job_materials")
+    .select("description, sort_order")
+    .eq("job_id", id)
+    .eq("tenant_id", ctx.tenantId);
+  if (exErr) return { data: null, error: exErr.message };
+
+  const have = new Set(
+    (existing ?? []).map((r) => String(r.description ?? "").trim().toLowerCase()),
+  );
+  const seen = new Set<string>();
+  const fresh = descriptions
+    .map((d) => String(d ?? "").trim())
+    .filter((d) => {
+      const key = d.toLowerCase();
+      if (!d || have.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  if (fresh.length === 0) return { data: { added: 0, items: null }, error: null };
+
+  const start =
+    Math.max(-1, ...(existing ?? []).map((r) => Number(r.sort_order ?? 0))) + 1;
+  const { error: insErr } = await supabase
+    .from("job_materials")
+    .insert(
+      fresh.map((description, i) => ({
+        tenant_id: ctx.tenantId,
+        job_id: id,
+        description,
+        quantity: 1,
+        unit_price: 0,
+        sort_order: start + i,
+      })) as never[],
+    )
+    .select("id");
+  if (insErr) return { data: null, error: insErr.message };
+
+  await recalcAndPersistJobTotals({ supabase, tenantId: ctx.tenantId, jobId: id });
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${id}`);
+  revalidatePath(`/jobs/${id}/invoice`);
+
+  // Hand back the full list so the client editor state stays in sync (its
+  // "save line items" would otherwise overwrite these rows with a stale list).
+  const { data: all } = await supabase
+    .from("job_materials")
+    .select("description, quantity, unit_price")
+    .eq("job_id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .order("sort_order", { ascending: true });
+  const items = (all ?? []).map((r) => ({
+    description: String(r.description ?? ""),
+    quantity: Number(r.quantity ?? 0),
+    unit_price: Number(r.unit_price ?? 0),
+  }));
+  return { data: { added: fresh.length, items }, error: null };
 }
 
 export async function updateJobCompletionDetails(

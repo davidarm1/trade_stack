@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  appendJobInvoiceMaterials,
   replaceJobInvoiceMaterials,
   updateJob,
   updateJobCompletionDetails,
@@ -213,28 +214,24 @@ export function InvoicePreviewPanel({
 
   async function addWorkAsLineItems() {
     if (busy) return;
-    const existing = materials.filter((m) => m.description.trim());
-    const have = new Set(existing.map((m) => m.description.trim().toLowerCase()));
-    const added = parseWorkLines(jobSheetFields.work_carried_out)
-      .filter((line) => !have.has(line.toLowerCase()))
-      .map((description) => ({ description, quantity: 1, unit_price: 0 }));
-    if (added.length === 0) {
-      setMsg("Nothing new to add - every work line is already an invoice line item.");
-      return;
-    }
-    const next = [...existing, ...added];
+    const lines = parseWorkLines(jobSheetFields.work_carried_out);
     setBusy("work_lines");
     setMsg(null);
     try {
-      const { error } = await replaceJobInvoiceMaterials(jobId, next);
+      const { data, error } = await appendJobInvoiceMaterials(jobId, lines);
       if (error) {
         setMsg(error);
         return;
       }
-      setMaterials(next);
+      const added = data?.added ?? 0;
+      if (added === 0) {
+        setMsg("Nothing new to add - every work line is already an invoice line item.");
+        return;
+      }
+      if (data?.items) setMaterials(data.items);
       setVersion((v) => v + 1);
       setActiveTab("invoice");
-      setMsg(`Added ${added.length} line item${added.length === 1 ? "" : "s"} from the work carried out. Set their prices below.`);
+      setMsg(`Added ${added} line item${added === 1 ? "" : "s"} from the work carried out. Set their prices below.`);
       router.refresh();
     } catch (error) {
       console.error("addWorkAsLineItems failed:", error);
