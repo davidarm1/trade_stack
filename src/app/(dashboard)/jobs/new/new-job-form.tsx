@@ -315,9 +315,11 @@ export function NewJobForm({
       }
     }
 
-    setPending(false);
+    // Leave `pending` true on success: the button stays on "Creating job…"
+    // until the navigation lands, so a slow route change can't look like a
+    // no-op (and invite a second click that would duplicate the job/client).
+    // createJob already revalidates /jobs, so no router.refresh() is needed.
     router.push(`/jobs/${data.id}`);
-    router.refresh();
   }
 
   return (
@@ -860,7 +862,7 @@ export function NewJobForm({
           disabled={pending}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Create job"}
+          {pending ? "Creating job…" : "Create job"}
         </button>
       </div>
     </form>
