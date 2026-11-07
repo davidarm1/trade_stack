@@ -416,24 +416,37 @@ export async function replaceJobInvoiceMaterials(
         description: desc || null,
         quantity: qty,
         unit_price: unit,
-        total_price: round2(qty * unit),
         sort_order: idx,
       };
     })
     .filter(Boolean);
 
-  const { error: delErr } = await supabase
+  // total_price is a generated column in the database (quantity * unit_price),
+  // so it must not be sent on insert.
+  // Insert the new rows first and only then remove the old ones, so a failed
+  // insert can't leave the job with no line items at all.
+  const { data: oldRows, error: oldErr } = await supabase
     .from("job_materials")
-    .delete()
+    .select("id")
     .eq("job_id", id)
     .eq("tenant_id", ctx.tenantId);
-  if (delErr) return { data: null, error: delErr.message };
+  if (oldErr) return { data: null, error: oldErr.message };
 
   if (normalized.length > 0) {
     const { error: insErr } = await supabase
       .from("job_materials")
       .insert(normalized as never[]);
     if (insErr) return { data: null, error: insErr.message };
+  }
+
+  const oldIds = (oldRows ?? []).map((r) => (r as { id: string }).id);
+  if (oldIds.length > 0) {
+    const { error: delErr } = await supabase
+      .from("job_materials")
+      .delete()
+      .in("id", oldIds)
+      .eq("tenant_id", ctx.tenantId);
+    if (delErr) return { data: null, error: delErr.message };
   }
 
   await recalcAndPersistJobTotals({
@@ -1062,7 +1075,6 @@ export async function duplicateJob(id: string) {
         description: m.description,
         quantity: m.quantity,
         unit_price: m.unit_price,
-        total_price: round2(finiteOrZero(m.quantity) * finiteOrZero(m.unit_price)),
         sort_order: m.sort_order,
       })),
     );
