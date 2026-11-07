@@ -55,6 +55,10 @@ export function JobDetailActions({
     ? true
     : false;
   const sentDone = Boolean(sentToEngineerAt?.trim());
+  // A job created with an engineer already picked has assigned_engineer_membership_id
+  // but no sent_to_engineer_at (that is only stamped by "Save engineer"), so
+  // treat an assigned engineer as enough to move on to completion.
+  const engineerReady = sentDone || engineerAssigned;
   const engineerCompletedDone = Boolean(receivedFromEngineerAt?.trim());
   const signatureDone = Boolean(signedAt?.trim());
   const approvedDone = Boolean(approvedAt?.trim());
@@ -63,7 +67,7 @@ export function JobDetailActions({
   const signatureRequired = signatureRequiredProp ?? true;
 
   const engineerCompleteEnabled =
-    sentDone && !engineerCompletedDone && (!signatureRequired || signatureDone);
+    engineerReady && !engineerCompletedDone && (!signatureRequired || signatureDone);
   const approveEnabled = engineerCompletedDone && !approvedDone;
   const invoiceEnabled = approvedDone;
   const previewInvoiceEnabled = approvedDone;
@@ -97,7 +101,7 @@ export function JobDetailActions({
       state: signatureRequired
         ? signatureDone
           ? "done"
-          : sentDone
+          : engineerReady
             ? "current"
             : "blocked"
         : "skipped",
