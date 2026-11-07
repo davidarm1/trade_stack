@@ -215,57 +215,72 @@ export function InvoicePreviewPanel({
     setBusy("jobsheet");
     setMsg(null);
 
-    if (clientId) {
-      const billingPayload = {
-        company_name: fields.client_name.trim() || clientName || "Client",
-        address1: addressFields.billing_address1.trim() || null,
-        address2: addressFields.billing_address2.trim() || null,
-        town: addressFields.billing_town.trim() || null,
-        postcode: addressFields.billing_postcode.trim() || null,
-      };
-      const sitePayload = {
-        site_address1: addressFields.site_address1.trim() || null,
-        site_address2: addressFields.site_address2.trim() || null,
-        site_town: addressFields.site_town.trim() || null,
-        site_postcode: addressFields.site_postcode.trim() || null,
-      };
-      const [billingRes, siteRes] = await Promise.all([
-        updateClient(clientId, billingPayload),
-        updateJob(jobId, sitePayload),
-      ]);
-      if (billingRes.error || siteRes.error) {
-        setBusy(null);
-        setMsg(billingRes.error ?? siteRes.error);
+    // Everything is inside one try/finally: a server action that throws (rather
+    // than returning { error }) or a PDF request that never answers used to
+    // leave the button stuck on "Saving..." with no message.
+    try {
+      if (clientId) {
+        const billingPayload = {
+          company_name: fields.client_name.trim() || clientName || "Client",
+          address1: addressFields.billing_address1.trim() || null,
+          address2: addressFields.billing_address2.trim() || null,
+          town: addressFields.billing_town.trim() || null,
+          postcode: addressFields.billing_postcode.trim() || null,
+        };
+        const sitePayload = {
+          site_address1: addressFields.site_address1.trim() || null,
+          site_address2: addressFields.site_address2.trim() || null,
+          site_town: addressFields.site_town.trim() || null,
+          site_postcode: addressFields.site_postcode.trim() || null,
+        };
+        const [billingRes, siteRes] = await Promise.all([
+          updateClient(clientId, billingPayload),
+          updateJob(jobId, sitePayload),
+        ]);
+        if (billingRes.error || siteRes.error) {
+          setMsg(billingRes.error ?? siteRes.error);
+          return;
+        }
+      }
+
+      const { error } = await updateJobCompletionDetails(jobId, {
+        work_carried_out: jobSheetFields.work_carried_out,
+        parts_used: jobSheetFields.parts_used,
+        recommendations: jobSheetFields.recommendations,
+      });
+      if (error) {
+        setMsg(error);
         return;
       }
-    }
 
-    const { error } = await updateJobCompletionDetails(jobId, {
-      work_carried_out: jobSheetFields.work_carried_out,
-      parts_used: jobSheetFields.parts_used,
-      recommendations: jobSheetFields.recommendations,
-    });
-    if (error) {
-      setBusy(null);
-      setMsg(error);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/jobs/${jobId}/generate-jobsheet`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId }),
-      });
-      const data = (await res.json()) as { success?: boolean; url?: string; error?: string };
-      if (!res.ok || !data.success || !data.url) {
-        throw new Error(data.error ?? "Could not create job sheet PDF");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/generate-jobsheet`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId }),
+          signal: controller.signal,
+        });
+        const data = (await res.json()) as { success?: boolean; url?: string; error?: string };
+        if (!res.ok || !data.success || !data.url) {
+          throw new Error(data.error ?? "Could not create job sheet PDF");
+        }
+        setSavedJobSheetUrl(data.url);
+        setVersion((v) => v + 1);
+        setMsg("Job sheet saved and PDF created.");
+      } finally {
+        clearTimeout(timeout);
       }
-      setSavedJobSheetUrl(data.url);
-      setVersion((v) => v + 1);
-      setMsg("Job sheet saved and PDF created.");
     } catch (error) {
-      setMsg(error instanceof Error ? error.message : "Could not create job sheet PDF");
+      console.error("saveJobSheet failed:", error);
+      setMsg(
+        error instanceof DOMException && error.name === "AbortError"
+          ? "Creating the job sheet PDF timed out. Your changes were saved; try again."
+          : error instanceof Error
+            ? error.message
+            : "Could not create job sheet PDF",
+      );
     } finally {
       setBusy(null);
     }
