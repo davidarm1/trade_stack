@@ -214,7 +214,11 @@ export function JobSheetView(props: JobSheetViewProps) {
             <tbody>
               {!hasMaterials ? (
                 <tr className="border-b border-slate-200">
-                  <td className="px-3 py-3 text-slate-500" colSpan={4}>No materials recorded</td>
+                  <td className="px-3 py-3 text-slate-500" colSpan={4}>
+                    {workCarriedOut
+                      ? "No priced line items — see work carried out above."
+                      : "No materials recorded"}
+                  </td>
                 </tr>
               ) : (
                 materials.map((m, idx) => (

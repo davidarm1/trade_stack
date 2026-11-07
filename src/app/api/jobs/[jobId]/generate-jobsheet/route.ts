@@ -470,7 +470,7 @@ async function buildJobSheetPdf(args: {
 
   const matRows = (materials ?? []).length
     ? (materials ?? [])
-    : [{ description: "No materials recorded", quantity: null, unit_price: null, total_price: null }];
+    : [{ description: opt(completion?.work_carried_out) ? "No priced line items - see work carried out above." : "No materials recorded", quantity: null, unit_price: null, total_price: null }];
 
   matRows.forEach((row, idx) => {
     ensureSpace(ROW_H + 4);

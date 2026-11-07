@@ -11,6 +11,7 @@ import {
 import { updateClient } from "@/actions/clients";
 import { PAYMENT_TERMS_PRESETS } from "@/lib/payment-terms";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
+import { parseWorkLines } from "@/lib/work-lines";
 
 type MaterialRow = {
   description: string;
@@ -208,6 +209,39 @@ export function InvoicePreviewPanel({
     }
     setVersion((v) => v + 1);
     setMsg("Materials saved.");
+  }
+
+  async function addWorkAsLineItems() {
+    if (busy) return;
+    const existing = materials.filter((m) => m.description.trim());
+    const have = new Set(existing.map((m) => m.description.trim().toLowerCase()));
+    const added = parseWorkLines(jobSheetFields.work_carried_out)
+      .filter((line) => !have.has(line.toLowerCase()))
+      .map((description) => ({ description, quantity: 1, unit_price: 0 }));
+    if (added.length === 0) {
+      setMsg("Nothing new to add - every work line is already an invoice line item.");
+      return;
+    }
+    const next = [...existing, ...added];
+    setBusy("work_lines");
+    setMsg(null);
+    try {
+      const { error } = await replaceJobInvoiceMaterials(jobId, next);
+      if (error) {
+        setMsg(error);
+        return;
+      }
+      setMaterials(next);
+      setVersion((v) => v + 1);
+      setActiveTab("invoice");
+      setMsg(`Added ${added.length} line item${added.length === 1 ? "" : "s"} from the work carried out. Set their prices below.`);
+      router.refresh();
+    } catch (error) {
+      console.error("addWorkAsLineItems failed:", error);
+      setMsg(error instanceof Error ? error.message : "Could not add line items");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function saveJobSheet() {
@@ -610,6 +644,15 @@ export function InvoicePreviewPanel({
               }}
             >
               Open job sheet in new tab
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null || parseWorkLines(jobSheetFields.work_carried_out).length === 0}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => void addWorkAsLineItems()}
+              title="Copy each line of 'Work carried out' onto the invoice as a line item"
+            >
+              {busy === "work_lines" ? "Adding..." : "Add to invoice as line items"}
             </button>
             <button
               type="button"
