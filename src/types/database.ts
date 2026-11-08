@@ -149,6 +149,14 @@ export interface Job {
   approved_by_membership_id: string | null;
   invoice_sent_at: string | null;
   invoice_sent_to_email: string | null;
+  invoice_scheduled_for: string | null;
+  invoice_scheduled_recipients: string | null;
+  invoice_scheduled_reason: string | null;
+  invoice_scheduled_by_id: string | null;
+  invoice_scheduled_by_membership_id: string | null;
+  invoice_schedule_status: "scheduled" | "sending" | "sent" | "failed" | "cancelled" | null;
+  invoice_schedule_error: string | null;
+  invoice_schedule_claimed_at: string | null;
   invoice_paid_at: string | null;
   payment_status: string | null;
   sent_to_debt_collection_at: string | null;

@@ -115,6 +115,10 @@ export default async function Page({
     total_inc_vat?: number | null;
     payment_terms_days?: number | null;
     invoice_sent_to_email?: string | null;
+    invoice_scheduled_for?: string | null;
+    invoice_schedule_status?: string | null;
+    invoice_schedule_error?: string | null;
+    invoice_scheduled_recipients?: string | null;
     custom_invoice_number?: string | null;
     client_order_number?: string | null;
     date_onsite?: string | null;
@@ -238,6 +242,9 @@ export default async function Page({
           signatureRequired={j.signature_required ?? true}
           invoiceVersionCount={invoiceVersions.length}
           initialInvoiceRecipients={initialInvoiceRecipients}
+          scheduledFor={j.invoice_scheduled_for ?? null}
+          scheduleStatus={j.invoice_schedule_status ?? null}
+          scheduleError={j.invoice_schedule_error ?? null}
           isPaid={String(j.payment_status ?? "").toLowerCase() === "paid"}
           engineers={engineers}
         />

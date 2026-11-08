@@ -13,7 +13,8 @@ import {
   normalizeB2ObjectKey,
   publicUrlFromStoredValue,
 } from "@/lib/b2-links";
-import { buildStoredInvoicePdf } from "@/lib/invoice-pdf-store";
+import { sendJobInvoiceCore } from "@/lib/send-job-invoice";
+import { parseInvoiceRecipients } from "@/lib/invoice-recipients";
 import { sendInvoiceEmail } from "@/lib/resend";
 import { renderTradeCompanyEmail } from "@/emails/TradeCompanyEmail";
 import type { Job } from "@/types/database";
@@ -664,211 +665,114 @@ export async function sendJobInvoice(
   const ctx = await getTenantContext();
   if (!ctx.success) return { data: null, error: ctx.error };
   const supabase = await createClient();
-  const recipientsRaw = String(recipientEmails ?? "").trim();
-  if (!recipientsRaw) {
-    return { data: null, error: "At least one recipient email is required." };
-  }
-  const recipients = Array.from(
-    new Set(
-      recipientsRaw
-        .split(/[,\n;]+/)
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  );
-  if (recipients.length === 0) {
-    return { data: null, error: "At least one recipient email is required." };
-  }
-  const bad = recipients.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(e));
-  if (bad) {
-    return { data: null, error: `Invalid email address: ${bad}` };
-  }
 
-  const { data: jobMeta, error: jobMetaErr } = await supabase
-    .from("jobs")
-    .select("id, title, job_number, client_id, jobsheet_url")
-    .eq("id", jobId)
-    .eq("tenant_id", ctx.tenantId)
-    .maybeSingle();
-  if (jobMetaErr || !jobMeta) return { data: null, error: jobMetaErr?.message ?? "Job not found." };
-
-  const [{ data: tenant }, { data: settingRows }] = await Promise.all([
-    supabase
-      .from("tenants")
-      .select("name, email, phone, logo_url, address1, address2, town, postcode")
-      .eq("id", ctx.tenantId)
-      .maybeSingle(),
-    supabase
-      .from("settings")
-      .select("field_key, field_value")
-      .eq("tenant_id", ctx.tenantId),
-  ]);
-  const settings = Object.fromEntries(
-    (settingRows ?? []).map((row) => [String(row.field_key), String(row.field_value ?? "")]),
-  );
-  const companyName =
-    String(settings.company_name ?? tenant?.name ?? "").trim() || "your company";
-  const companyPhone = String(
-    settings.company_phone ?? settings.phone ?? tenant?.phone ?? "",
-  ).trim();
-  const companyEmail = String(
-    settings.company_email ?? settings.email ?? tenant?.email ?? "",
-  ).trim();
-  const companyAddressLines = [
-    settings.address_line_1 ?? settings.address1 ?? tenant?.address1,
-    settings.address_line_2 ?? settings.address2 ?? tenant?.address2,
-    settings.town ?? tenant?.town,
-    settings.postcode ?? tenant?.postcode,
-  ]
-    .map((part) => String(part ?? "").trim())
-    .filter(Boolean);
-  const companyAddressText = companyAddressLines.join(", ");
-  const companyLogoUrl = String(tenant?.logo_url ?? "").trim() || null;
-  const companyContactParts = [
-    companyAddressText,
-    companyPhone ? `Tel: ${companyPhone}` : "",
-    companyEmail ? `Email: ${companyEmail}` : "",
-  ].filter(Boolean);
-
-  const { data: versions, error: verErr } = await supabase
-    .from("job_invoice_versions")
-    .select("id, version_no")
-    .eq("tenant_id", ctx.tenantId)
-    .eq("job_id", jobId)
-    .order("version_no", { ascending: false });
-  if (verErr) return { data: null, error: verErr.message };
-  const nextVersion = ((versions?.[0]?.version_no as number | undefined) ?? 0) + 1;
-  const trimmedReason = String(versionReason ?? "").trim();
-  if (nextVersion > 1 && !trimmedReason) {
-    return {
-      data: null,
-      error: "Reason is required when sending invoice version v2 or later.",
-    };
-  }
-
-  const { buffer, fileName } = await buildStoredInvoicePdf({
+  const result = await sendJobInvoiceCore({
     supabase,
     tenantId: ctx.tenantId,
+    actor: { userId: ctx.userId, membershipId: ctx.membershipId },
     jobId,
-    versionNo: nextVersion,
+    versionReason,
+    recipientEmails,
   });
-  const key = `tradestack/${ctx.tenantId}/invoices/${jobId}/v${nextVersion}_${fileName}`;
-  await uploadToB2(buffer, key, "application/pdf");
-  const downloadUrl = b2DownloadPathForKey(key);
-  const publicInvoiceUrl = publicUrlForB2Key(key);
+  if (result.error) return result;
 
-  const now = new Date().toISOString();
-
-  const { error: clearErr } = await supabase
-    .from("job_invoice_versions")
-    .update({ is_current: false })
-    .eq("tenant_id", ctx.tenantId)
-    .eq("job_id", jobId)
-    .eq("is_current", true);
-  if (clearErr) return { data: null, error: clearErr.message };
-
-  const { error: insErr } = await supabase.from("job_invoice_versions").insert({
-    tenant_id: ctx.tenantId,
-    job_id: jobId,
-    version_no: nextVersion,
-    reason: trimmedReason || null,
-    file_name: fileName,
-    b2_key: key,
-    public_url: key,
-    is_current: true,
-    created_by_id: ctx.userId,
-    created_by_membership_id: ctx.membershipId ?? null,
-    created_at: now,
-  });
-  if (insErr) return { data: null, error: insErr.message };
-
-  const { error: fileErr } = await supabase.from("tenant_files").insert({
-    tenant_id: ctx.tenantId,
-    job_id: jobId,
-    file_type: "invoice",
-    b2_key: key,
-    file_name: fileName,
-    file_size_bytes: buffer.length,
-    public_url: key,
-  });
-  if (fileErr) return { data: null, error: fileErr.message };
-
-  const subjectCore = jobInvoiceEmailSubject({
-    jobNumber: jobMeta.job_number as number | null | undefined,
-    title: String(jobMeta.title ?? "Invoice"),
-  });
-  const subject = `${companyName} — ${subjectCore}`;
-  const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
-  const html = await renderTradeCompanyEmail({
-    preview: `${companyName} invoice`,
-    eyebrow: "Invoice",
-    heading: `${companyName} invoice`,
-    companyName,
-    companyLogoUrl,
-    companyContactLines: companyContactParts,
-    intro: `Hello, please find the invoice for ${companyName} attached. The public links are below.`,
-    primaryAction: { label: "Open invoice PDF", href: publicInvoiceUrl },
-    secondaryActions: storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : [],
-    supportingText: trimmedReason ? `Reason for this version: ${trimmedReason}` : undefined,
-    footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
-  });
-  const text = [
-    "Hello,",
-    "",
-    `Please find the invoice for ${companyName} attached.`,
-    "Public links are included below:",
-    publicInvoiceUrl,
-    "",
-    companyName,
-    ...companyContactParts,
-    ...(storedJobSheetLink ? ["", "Open job sheet PDF:", storedJobSheetLink] : []),
-    trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
-    "",
-    "If you have any questions, please reply to this email.",
-    `Sent via Trade Stack on behalf of ${companyName}.`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  try {
-    await sendInvoiceEmail({
-      to: recipients,
-      subject,
-      html,
-      text,
-      fromName: companyName,
-      replyTo: companyEmail || undefined,
-      attachments: [
-        {
-          filename: fileName,
-          content: buffer,
-          contentType: "application/pdf",
-        },
-      ],
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Email send failed.";
-    return {
-      data: null,
-      error: `Invoice PDF stored, but email sending failed: ${message}`,
-    };
-  }
-
-  const { error: jobErr } = await supabase
+  // Sending by hand supersedes any pending scheduled send for this job.
+  await supabase
     .from("jobs")
-    .update({
-      invoice_sent_at: now,
-      invoice_sent_to_email: recipients.join(", "),
-      updated_at: now,
-      status: "invoiced",
-    })
+    .update({ invoice_schedule_status: "cancelled", invoice_schedule_error: null })
     .eq("id", jobId)
-    .eq("tenant_id", ctx.tenantId);
-  if (jobErr) return { data: null, error: jobErr.message };
+    .eq("tenant_id", ctx.tenantId)
+    .in("invoice_schedule_status", ["scheduled", "failed"]);
 
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}/invoice`);
-  return { data: { version_no: nextVersion, public_url: downloadUrl }, error: null };
+  return result;
+}
+
+/**
+ * Schedule an approved job's invoice to be emailed later. A cron
+ * (/api/cron/send-scheduled-invoices) sends it when the time passes, using the
+ * recipients and reason saved here; the invoice is built and dated at send time.
+ */
+export async function scheduleJobInvoice(
+  jobId: string,
+  sendAtIso: string,
+  recipientEmails: string,
+  versionReason: string | null,
+): Promise<{ data: { scheduled_for: string } | null; error: string | null }> {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  const when = new Date(sendAtIso);
+  if (Number.isNaN(when.getTime())) return { data: null, error: "Choose a valid date and time." };
+  const now = Date.now();
+  if (when.getTime() < now + 60_000) {
+    return { data: null, error: "Choose a time in the future." };
+  }
+  if (when.getTime() > now + 366 * 24 * 60 * 60 * 1000) {
+    return { data: null, error: "Choose a time within the next year." };
+  }
+
+  const parsed = parseInvoiceRecipients(recipientEmails);
+  if (parsed.error) return { data: null, error: parsed.error };
+
+  const { data: job, error: jobErr } = await supabase
+    .from("jobs")
+    .select("id, approved_at, invoice_sent_at")
+    .eq("id", jobId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (jobErr || !job) return { data: null, error: jobErr?.message ?? "Job not found." };
+  if (!job.approved_at) return { data: null, error: "Approve the job before scheduling its invoice." };
+  if (job.invoice_sent_at) {
+    return { data: null, error: "This invoice has already been sent. Send a new version by hand." };
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      invoice_scheduled_for: when.toISOString(),
+      invoice_scheduled_recipients: parsed.recipients.join(", "),
+      invoice_scheduled_reason: String(versionReason ?? "").trim() || null,
+      invoice_scheduled_by_id: ctx.userId,
+      invoice_scheduled_by_membership_id: ctx.membershipId ?? null,
+      invoice_schedule_status: "scheduled",
+      invoice_schedule_error: null,
+      invoice_schedule_claimed_at: null,
+    })
+    .eq("id", jobId)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) return { data: null, error: error.message };
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  return { data: { scheduled_for: when.toISOString() }, error: null };
+}
+
+export async function cancelScheduledJobInvoice(jobId: string) {
+  const ctx = await getTenantContext();
+  if (!ctx.success) return { data: null, error: ctx.error };
+  const supabase = await createClient();
+
+  // Only a pending or failed schedule can be cancelled; one already being sent
+  // by the cron is left alone.
+  const { data, error } = await supabase
+    .from("jobs")
+    .update({ invoice_schedule_status: "cancelled", invoice_schedule_error: null })
+    .eq("id", jobId)
+    .eq("tenant_id", ctx.tenantId)
+    .in("invoice_schedule_status", ["scheduled", "failed"])
+    .select("id");
+  if (error) return { data: null, error: error.message };
+  if (!data || data.length === 0) {
+    return { data: null, error: "This invoice is no longer scheduled (it may already be sending)." };
+  }
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  return { data: true, error: null };
 }
 
 export async function sendJobSheetEmail(

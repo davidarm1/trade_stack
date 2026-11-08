@@ -2,9 +2,38 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { sendJobInvoice, sendJobSheetEmail, updateJob } from "@/actions/jobs";
+import {
+  cancelScheduledJobInvoice,
+  scheduleJobInvoice,
+  sendJobInvoice,
+  sendJobSheetEmail,
+  updateJob,
+} from "@/actions/jobs";
 import { WorkflowStepper } from "@/components/workflow-stepper";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
+
+const LONDON = "Europe/London";
+
+function formatScheduled(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: LONDON,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+/** Next 09:00 as a value for <input type="datetime-local"> in the browser's zone. */
+function defaultScheduleValue(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export function JobDetailActions({
   jobId,
@@ -20,6 +49,9 @@ export function JobDetailActions({
   signatureRequired: signatureRequiredProp,
   invoiceVersionCount,
   initialInvoiceRecipients,
+  scheduledFor = null,
+  scheduleStatus = null,
+  scheduleError = null,
   isPaid,
   engineers,
 }: {
@@ -36,6 +68,9 @@ export function JobDetailActions({
   signatureRequired: boolean | null;
   invoiceVersionCount: number;
   initialInvoiceRecipients: string;
+  scheduledFor?: string | null;
+  scheduleStatus?: string | null;
+  scheduleError?: string | null;
   isPaid: boolean;
   engineers: { id: string; name: string | null }[];
 }) {
@@ -50,6 +85,9 @@ export function JobDetailActions({
     initialInvoiceRecipients,
   );
   const [invoiceReason, setInvoiceReason] = useState("Amount corrected");
+  const [sendMode, setSendMode] = useState<"now" | "later">("now");
+  const [scheduleAt, setScheduleAt] = useState("");
+  const isScheduled = scheduleStatus === "scheduled" && Boolean(scheduledFor);
   const hasEngineer = selectedEngineerId.trim().length > 0;
   const engineerAssigned = assignedEngineerMembershipId?.trim().length
     ? true
@@ -196,6 +234,57 @@ export function JobDetailActions({
     router.refresh();
   }
 
+  async function handleScheduleInvoice() {
+    if (busyKey) return;
+    const recipients = invoiceRecipients.trim();
+    if (!recipients) {
+      setMsg("Enter at least one recipient email.");
+      return;
+    }
+    const reason = invoiceVersionCount >= 1 ? invoiceReason.trim() : null;
+    if (invoiceVersionCount >= 1 && !reason) {
+      setMsg("Invoice version reason is required for v2+.");
+      return;
+    }
+    const when = new Date(scheduleAt);
+    if (!scheduleAt || Number.isNaN(when.getTime())) {
+      setMsg("Choose a date and time to send the invoice.");
+      return;
+    }
+    setBusyKey("invoice");
+    setMsg(null);
+    const { data, error } = await scheduleJobInvoice(
+      jobId,
+      when.toISOString(),
+      recipients,
+      reason,
+    );
+    setBusyKey(null);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    setEmailModalType(null);
+    setMsg(
+      `Marked as scheduled: the invoice will be emailed ${formatScheduled(data!.scheduled_for)}.`,
+    );
+    router.refresh();
+  }
+
+  async function handleCancelSchedule() {
+    if (busyKey) return;
+    setBusyKey("cancel_schedule");
+    setMsg(null);
+    const { error } = await cancelScheduledJobInvoice(jobId);
+    setBusyKey(null);
+    if (error) {
+      setMsg(error);
+      return;
+    }
+    setMsg("Marked as cancelled: the scheduled invoice will not be sent.");
+    router.refresh();
+  }
+
   async function handleSendJobSheet() {
     if (busyKey) return;
     const recipients = invoiceRecipients.trim();
@@ -335,6 +424,12 @@ export function JobDetailActions({
           })}
           onClick={() => {
             if (busyKey) return;
+            setSendMode("now");
+            setScheduleAt(
+              scheduledFor && scheduleStatus === "scheduled"
+                ? ""
+                : defaultScheduleValue(),
+            );
             setEmailModalType("invoice");
           }}
         >
@@ -404,6 +499,61 @@ export function JobDetailActions({
           {msg}
         </p>
       )}
+      {isScheduled && scheduledFor ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          <span>
+            Invoice scheduled to send <strong>{formatScheduled(scheduledFor)}</strong>.
+          </span>
+          <button
+            type="button"
+            disabled={busyKey !== null}
+            onClick={() => {
+              setSendMode("later");
+              setScheduleAt(defaultScheduleValue());
+              setEmailModalType("invoice");
+            }}
+            className="underline underline-offset-2 disabled:opacity-60"
+          >
+            Change
+          </button>
+          <button
+            type="button"
+            disabled={busyKey !== null}
+            onClick={() => void handleCancelSchedule()}
+            className="underline underline-offset-2 disabled:opacity-60"
+          >
+            {busyKey === "cancel_schedule" ? "Cancelling..." : "Cancel"}
+          </button>
+        </div>
+      ) : null}
+      {scheduleStatus === "failed" ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <span>
+            The scheduled invoice could not be sent
+            {scheduleError ? `: ${scheduleError}` : "."}
+          </span>
+          <button
+            type="button"
+            disabled={busyKey !== null}
+            onClick={() => {
+              setSendMode("later");
+              setScheduleAt(defaultScheduleValue());
+              setEmailModalType("invoice");
+            }}
+            className="underline underline-offset-2 disabled:opacity-60"
+          >
+            Reschedule
+          </button>
+          <button
+            type="button"
+            disabled={busyKey !== null}
+            onClick={() => void handleCancelSchedule()}
+            className="underline underline-offset-2 disabled:opacity-60"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {emailModalType ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -431,6 +581,48 @@ export function JobDetailActions({
                 placeholder="customer@example.com, office@example.com"
               />
             </label>
+            {emailModalType === "invoice" ? (
+              <fieldset className="mt-3">
+                <legend className="text-sm font-medium text-slate-700">When to send</legend>
+                <div className="mt-1 flex gap-4 text-sm text-slate-700">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="send_mode"
+                      checked={sendMode === "now"}
+                      onChange={() => setSendMode("now")}
+                    />
+                    Send now
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="send_mode"
+                      checked={sendMode === "later"}
+                      onChange={() => {
+                        setSendMode("later");
+                        if (!scheduleAt) setScheduleAt(defaultScheduleValue());
+                      }}
+                    />
+                    Schedule for later
+                  </label>
+                </div>
+                {sendMode === "later" ? (
+                  <div className="mt-2">
+                    <input
+                      type="datetime-local"
+                      value={scheduleAt}
+                      onChange={(e) => setScheduleAt(e.target.value)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      The invoice is created and dated when it is sent, using the
+                      job as it is at that time. Checked every few minutes.
+                    </p>
+                  </div>
+                ) : null}
+              </fieldset>
+            ) : null}
             {emailModalType === "invoice" && invoiceVersionCount >= 1 ? (
               <label className="mt-3 block text-sm font-medium text-slate-700">
                 Reason for this new version
@@ -452,11 +644,23 @@ export function JobDetailActions({
               </button>
               <button
                 type="button"
-                onClick={() => void (emailModalType === "invoice" ? handleSendInvoice() : handleSendJobSheet())}
+                onClick={() =>
+                  void (emailModalType === "invoice"
+                    ? sendMode === "later"
+                      ? handleScheduleInvoice()
+                      : handleSendInvoice()
+                    : handleSendJobSheet())
+                }
                 disabled={busyKey === emailModalType}
                 className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
-                {busyKey === emailModalType ? "Sending..." : "Send"}
+                {busyKey === emailModalType
+                  ? emailModalType === "invoice" && sendMode === "later"
+                    ? "Scheduling..."
+                    : "Sending..."
+                  : emailModalType === "invoice" && sendMode === "later"
+                    ? "Schedule"
+                    : "Send"}
               </button>
             </div>
           </div>
