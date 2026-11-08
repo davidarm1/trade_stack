@@ -45,8 +45,21 @@ type JobsTableRow = {
   invoice_sent_at?: string | null;
   payment_terms_days?: number | null;
   invoice_sent_to_email?: string | null;
+  invoice_scheduled_for?: string | null;
+  invoice_schedule_status?: string | null;
   invoice_send_log?: { id: string; sent_at: string }[];
 };
+
+function scheduledInvoiceLabel(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
 
 function jobsDfiCellProps(j: JobsTableRow) {
   const terms = paymentTermsDaysOrDefault(j as JobPayFields);
@@ -622,6 +635,22 @@ export default async function Page({
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {j.status ?? "—"}
+                      {j.invoice_schedule_status === "scheduled" && j.invoice_scheduled_for ? (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"
+                          title="Invoice is scheduled — leave it, it will send automatically"
+                        >
+                          Invoice scheduled · {scheduledInvoiceLabel(j.invoice_scheduled_for)}
+                        </div>
+                      ) : null}
+                      {j.invoice_schedule_status === "failed" ? (
+                        <div
+                          className="mt-1 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                          title="The scheduled invoice failed — open the job to reschedule or send by hand"
+                        >
+                          Schedule failed
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {j.engineer_name ?? "—"}
