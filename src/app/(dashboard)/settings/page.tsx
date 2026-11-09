@@ -1,9 +1,19 @@
+import { getPaymentAccountStatus, refreshStripeAccount } from "@/actions/payments";
 import { getSettings } from "@/actions/settings";
 import { SettingsForm } from "./settings-form";
+import { OnlinePaymentsSettings } from "./online-payments-settings";
 import { TravelPaySettings } from "./travel-pay-settings";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ stripe?: string }>;
+}) {
+  const { stripe } = await searchParams;
+  // Coming back from Stripe onboarding: pull the new account status first.
+  if (stripe === "return" || stripe === "refresh") await refreshStripeAccount();
   const { data, error } = await getSettings();
+  const { data: paymentStatus } = await getPaymentAccountStatus();
 
   if (error) {
     return (
@@ -26,6 +36,7 @@ export default async function SettingsPage() {
         keyValues={data?.keyValues ?? {}}
       />
       <TravelPaySettings keyValues={data?.keyValues ?? {}} />
+      {paymentStatus ? <OnlinePaymentsSettings status={paymentStatus} /> : null}
     </div>
   );
 }

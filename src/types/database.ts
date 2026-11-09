@@ -149,6 +149,7 @@ export interface Job {
   approved_by_membership_id: string | null;
   invoice_sent_at: string | null;
   invoice_sent_to_email: string | null;
+  invoice_pay_token: string;
   invoice_scheduled_for: string | null;
   invoice_scheduled_recipients: string | null;
   invoice_scheduled_reason: string | null;

@@ -16,6 +16,9 @@ import { JobDetailActions } from "./job-detail-actions";
 import { ClientNameEditor } from "./client-name-editor";
 import { InvoicePreviewPanel } from "./invoice-preview-panel";
 import { JobDetailsEditor } from "./job-details-editor";
+import { PayLinkCopy } from "./pay-link-copy";
+import { getJobPaymentInfo } from "@/actions/payments";
+import { formatMinor } from "@/lib/payments";
 
 const CURRENCY_TO_LOCALE: Record<string, string> = {
   GBP: "en-GB",
@@ -138,6 +141,7 @@ export default async function Page({
   const jobNo = j.job_number ?? null;
   const legacy = String(j.legacy_ref ?? "").trim();
   const titleStr = String(j.title ?? "Job");
+  const paymentInfo = await getJobPaymentInfo(j.id);
   const jobRef = formatJobRefFormal(jobNo) || "—";
   const plainJobNo = jobNo == null ? "—" : String(jobNo);
   const clientName =
@@ -314,6 +318,20 @@ export default async function Page({
                   {formatTimeOnsite(j.time_onsite) || "—"}
                 </dd>
               </div>
+              {paymentInfo.payUrl || paymentInfo.payments.length > 0 ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-slate-500">Online payment</dt>
+                  <dd className="mt-1 space-y-2 text-slate-900">
+                    {paymentInfo.payUrl ? <PayLinkCopy url={paymentInfo.payUrl} /> : null}
+                    {paymentInfo.payments.map((p) => (
+                      <div key={p.id} className="text-xs text-emerald-700">
+                        Paid {formatMinor(p.amount_minor, p.currency)} online on{" "}
+                        {new Date(p.paid_at).toLocaleString("en-GB", { timeZone: "Europe/London" })}
+                      </div>
+                    ))}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
             <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap">
               {String(j.description ?? "")}

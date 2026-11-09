@@ -6,6 +6,7 @@ import { sendInvoiceEmail } from "@/lib/resend";
 import { renderTradeCompanyEmail } from "@/emails/TradeCompanyEmail";
 import { jobInvoiceEmailSubject } from "@/lib/job-number";
 import { parseInvoiceRecipients } from "@/lib/invoice-recipients";
+import { getInvoicePayLink } from "@/lib/pay-link";
 
 export type InvoiceActor = { userId: string; membershipId: string | null };
 
@@ -143,6 +144,8 @@ export async function sendJobInvoiceCore(args: {
   });
   const subject = `${companyName} — ${subjectCore}`;
   const storedJobSheetLink = publicUrlFromStoredValue(jobMeta.jobsheet_url);
+  // Only present when the company has connected Stripe and there is an amount due.
+  const payUrl = await getInvoicePayLink({ tenantId, jobId }).catch(() => null);
   const html = await renderTradeCompanyEmail({
     preview: `${companyName} invoice`,
     eyebrow: "Invoice",
@@ -152,7 +155,10 @@ export async function sendJobInvoiceCore(args: {
     companyContactLines: companyContactParts,
     intro: `Hello, please find the invoice for ${companyName} attached. The public links are below.`,
     primaryAction: { label: "Open invoice PDF", href: publicInvoiceUrl },
-    secondaryActions: storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : [],
+    secondaryActions: [
+      ...(payUrl ? [{ label: "Pay online", href: payUrl }] : []),
+      ...(storedJobSheetLink ? [{ label: "Open job sheet PDF", href: storedJobSheetLink }] : []),
+    ],
     supportingText: trimmedReason ? `Reason for this version: ${trimmedReason}` : undefined,
     footerNote: `Sent via Trade Stack on behalf of ${companyName}.`,
   });
@@ -165,6 +171,7 @@ export async function sendJobInvoiceCore(args: {
     "",
     companyName,
     ...companyContactParts,
+    ...(payUrl ? ["", "Pay online:", payUrl] : []),
     ...(storedJobSheetLink ? ["", "Open job sheet PDF:", storedJobSheetLink] : []),
     trimmedReason ? `Reason for this version: ${trimmedReason}` : "",
     "",
