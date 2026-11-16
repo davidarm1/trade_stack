@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
 
@@ -14,7 +15,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </p>
             <h1 className="text-lg font-semibold text-slate-900">Trade Stack</h1>
           </div>
-          <p className="text-sm text-slate-500">Owner-only console</p>
+          <nav className="flex gap-4 text-sm font-medium text-slate-600">
+            <Link href="/admin/usage" className="hover:text-slate-900">Usage</Link>
+            <Link href="/admin/companies" className="hover:text-slate-900">Companies</Link>
+            <Link href="/admin/staff" className="hover:text-slate-900">Staff</Link>
+          </nav>
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-6 py-6">{children}</main>

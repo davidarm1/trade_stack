@@ -21,6 +21,8 @@ export async function getTenantContext(): Promise<TenantContext> {
     .select("id, company_id")
     .eq("user_id", user.id)
     .eq("status", "active")
+    // Support sessions expire: ignore a membership whose expires_at has passed.
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
     .order("updated_at", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)

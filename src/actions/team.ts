@@ -53,6 +53,7 @@ export async function getAssignableEngineers() {
     .select("id, user_id, display_name")
     .eq("company_id", ctx.tenantId)
     .eq("status", "active")
+    .eq("is_support", false)
     .order("display_name", { ascending: true });
   if (membershipsError) return { data: null, error: membershipsError.message };
 
@@ -97,7 +98,8 @@ export async function getTeamMembersWithMembershipIds(): Promise<{
       supabase
         .from("memberships")
         .select("id, user_id, display_name")
-        .eq("company_id", ctx.tenantId),
+        .eq("company_id", ctx.tenantId)
+        .eq("is_support", false),
     ]);
 
   if (usersError) return { data: null, error: usersError.message };
@@ -136,7 +138,8 @@ export async function getTeamMembers() {
   const { data: memberships, error: mErr } = await supabase
     .from("memberships")
     .select("user_id, role, status, display_name")
-    .eq("company_id", ctx.tenantId);
+    .eq("company_id", ctx.tenantId)
+    .eq("is_support", false);
   if (mErr) return { data: null, error: mErr.message };
 
   const userIds = [...new Set((memberships ?? []).map((m) => m.user_id))];
@@ -714,7 +717,8 @@ export async function updateTeamMember(id: string, data: TeamMemberUpdate) {
         .select("id", { count: "exact", head: true })
         .eq("company_id", actor.tenantId)
         .eq("role", "owner")
-        .eq("status", "active");
+        .eq("status", "active")
+        .eq("is_support", false);
       if (cErr) return { data: null, error: cErr.message };
       if ((count ?? 0) <= 1) {
         return { data: null, error: "Cannot remove the last owner from this company." };
