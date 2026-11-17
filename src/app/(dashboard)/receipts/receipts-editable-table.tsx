@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format-currency";
 import { b2DownloadPathFromStoredValue } from "@/lib/b2-links";
+import { vatFileSuffix, xeroAmountFields } from "@/lib/receipt-export-vat";
 import { OutgoingsSummaryCards } from "./outgoings-summary-cards";
 import {
   baselineLineSumForReceipt,
@@ -370,9 +371,12 @@ function LineItemsHoverTrigger({
 export function ReceiptsEditableTable({
   rows,
   currencyCode = "GBP",
+  vatRegistered = true,
 }: {
   rows: ReceiptRow[];
   currencyCode?: string | null;
+  /** Default for the Export "Include VAT" tick box: ticked for VAT-registered companies. */
+  vatRegistered?: boolean;
 }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -408,6 +412,7 @@ export function ReceiptsEditableTable({
   const [rangeTo, setRangeTo] = useState("");
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [includeVat, setIncludeVat] = useState(vatRegistered);
   const exportRef = useRef<HTMLDivElement>(null);
 
   const categorySuggestions = useMemo(
@@ -623,47 +628,85 @@ export function ReceiptsEditableTable({
       "ContactName", "InvoiceDate", "DueDate", "Description",
       "Quantity", "UnitAmount", "AccountCode", "TaxType", "TaxAmount",
     ];
-    const data = exportRows.map((r) => [
-      escapeCSV(r.supplier_name),
-      escapeCSV(fmtDDMMYYYY(r.invoice_date)),
-      escapeCSV(fmtDDMMYYYY(r.due_date)),
-      escapeCSV(r.category),
-      "1",
-      escapeCSV(r.amount_net),
-      "",
-      "20% (VAT on Expenses)",
-      escapeCSV(r.amount_tax),
-    ]);
-    downloadCsv(toCsvString(headers, data), `outgoings-xero-${exportFileSuffix()}.csv`);
+    const data = exportRows.map((r) => {
+      const money = xeroAmountFields(r, includeVat);
+      return [
+        escapeCSV(r.supplier_name),
+        escapeCSV(fmtDDMMYYYY(r.invoice_date)),
+        escapeCSV(fmtDDMMYYYY(r.due_date)),
+        escapeCSV(r.category),
+        "1",
+        escapeCSV(money.unitAmount),
+        "",
+        escapeCSV(money.taxType),
+        escapeCSV(money.taxAmount),
+      ];
+    });
+    downloadCsv(
+      toCsvString(headers, data),
+      `outgoings-xero-${exportFileSuffix()}${vatFileSuffix(includeVat)}.csv`,
+    );
   }
 
   function exportSage(exportRows: ReceiptRow[]) {
-    const headers = ["Date", "Reference", "Supplier", "Net", "VAT", "Gross", "Category"];
-    const data = exportRows.map((r) => [
-      escapeCSV(fmtDDMMYYYY(r.invoice_date)),
-      "",
-      escapeCSV(r.supplier_name),
-      escapeCSV(r.amount_net),
-      escapeCSV(r.amount_tax),
-      escapeCSV(r.amount_total),
-      escapeCSV(r.category),
-    ]);
-    downloadCsv(toCsvString(headers, data), `outgoings-sage-${exportFileSuffix()}.csv`);
+    const headers = includeVat
+      ? ["Date", "Reference", "Supplier", "Net", "VAT", "Gross", "Category"]
+      : ["Date", "Reference", "Supplier", "Total", "Category"];
+    const data = exportRows.map((r) =>
+      includeVat
+        ? [
+            escapeCSV(fmtDDMMYYYY(r.invoice_date)),
+            "",
+            escapeCSV(r.supplier_name),
+            escapeCSV(r.amount_net),
+            escapeCSV(r.amount_tax),
+            escapeCSV(r.amount_total),
+            escapeCSV(r.category),
+          ]
+        : [
+            escapeCSV(fmtDDMMYYYY(r.invoice_date)),
+            "",
+            escapeCSV(r.supplier_name),
+            escapeCSV(r.amount_total ?? r.amount_net),
+            escapeCSV(r.category),
+          ],
+    );
+    downloadCsv(
+      toCsvString(headers, data),
+      `outgoings-sage-${exportFileSuffix()}${vatFileSuffix(includeVat)}.csv`,
+    );
   }
 
   function exportGeneric(exportRows: ReceiptRow[]) {
-    const headers = ["Supplier", "Date", "Amount", "Net", "VAT", "Category", "Status", "Job"];
-    const data = exportRows.map((r) => [
-      escapeCSV(r.supplier_name),
-      escapeCSV(fmtDDMMYYYY(r.invoice_date)),
-      escapeCSV(r.amount_total),
-      escapeCSV(r.amount_net),
-      escapeCSV(r.amount_tax),
-      escapeCSV(r.category),
-      escapeCSV(r.payment_status),
-      escapeCSV(r.job_title ?? (r.job_number != null ? String(r.job_number) : "")),
-    ]);
-    downloadCsv(toCsvString(headers, data), `outgoings-${exportFileSuffix()}.csv`);
+    const headers = includeVat
+      ? ["Supplier", "Date", "Amount", "Net", "VAT", "Category", "Status", "Job"]
+      : ["Supplier", "Date", "Amount", "Category", "Status", "Job"];
+    const data = exportRows.map((r) => {
+      const job = escapeCSV(r.job_title ?? (r.job_number != null ? String(r.job_number) : ""));
+      return includeVat
+        ? [
+            escapeCSV(r.supplier_name),
+            escapeCSV(fmtDDMMYYYY(r.invoice_date)),
+            escapeCSV(r.amount_total),
+            escapeCSV(r.amount_net),
+            escapeCSV(r.amount_tax),
+            escapeCSV(r.category),
+            escapeCSV(r.payment_status),
+            job,
+          ]
+        : [
+            escapeCSV(r.supplier_name),
+            escapeCSV(fmtDDMMYYYY(r.invoice_date)),
+            escapeCSV(r.amount_total ?? r.amount_net),
+            escapeCSV(r.category),
+            escapeCSV(r.payment_status),
+            job,
+          ];
+    });
+    downloadCsv(
+      toCsvString(headers, data),
+      `outgoings-${exportFileSuffix()}${vatFileSuffix(includeVat)}.csv`,
+    );
   }
 
   const { inPeriod, overduePrior } = useMemo(() => {
@@ -1341,7 +1384,23 @@ export function ReceiptsEditableTable({
             </svg>
           </button>
           {exportOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            <div className="absolute right-0 top-full z-10 mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+              <label className="flex cursor-pointer items-start gap-2 border-b border-slate-100 px-4 py-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={includeVat}
+                  onChange={(e) => setIncludeVat(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Include VAT
+                  <span className="block text-xs text-slate-500">
+                    {includeVat
+                      ? "Net, VAT and gross amounts"
+                      : "Totals only, no VAT columns"}
+                  </span>
+                </span>
+              </label>
               <button
                 type="button"
                 onClick={() => { exportXero(filteredRows); setExportOpen(false); }}

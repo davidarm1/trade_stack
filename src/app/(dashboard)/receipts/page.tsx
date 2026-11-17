@@ -1,5 +1,6 @@
 import { getReceipts } from "@/actions/receipts";
 import { getSettings } from "@/actions/settings";
+import { isVatRegistered } from "@/lib/receipt-export-vat";
 import { AddOutgoingModal } from "./add-outgoing-modal";
 import { OutgoingsDueSoonAlert } from "./outgoings-due-soon-alert";
 import { ReceiptsEditableTable } from "./receipts-editable-table";
@@ -34,7 +35,11 @@ export default async function ReceiptsPage() {
       </div>
 
       <OutgoingsDueSoonAlert rows={rows ?? []} currencyCode={currencyCode} />
-      <ReceiptsEditableTable rows={rows ?? []} currencyCode={currencyCode} />
+      <ReceiptsEditableTable
+        rows={rows ?? []}
+        currencyCode={currencyCode}
+        vatRegistered={isVatRegistered(settingsRes.data?.tenant?.vat_number)}
+      />
     </div>
   );
 }
