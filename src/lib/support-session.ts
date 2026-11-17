@@ -58,12 +58,18 @@ export async function openSupportSession(args: {
 
   const { data: existing } = await admin
     .from("memberships")
-    .select("id, is_support")
+    .select("id, is_support, status")
     .eq("user_id", args.adminUserId)
     .eq("company_id", args.tenantId)
     .maybeSingle();
-  if (existing && !existing.is_support) {
-    return { error: "This account already belongs to that company as a normal member." };
+  // An ACTIVE normal membership is never overwritten. A former one (left or
+  // suspended) can be reused: the row becomes this account's support
+  // membership, since (user, company) is unique.
+  if (existing && !existing.is_support && existing.status === "active") {
+    return {
+      error:
+        "This account is still an active member of that company. Remove it from the company's Team page first, then open a support session.",
+    };
   }
 
   const now = new Date();
