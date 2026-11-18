@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createClient } from "@/actions/clients";
+import { createClient, updateClient } from "@/actions/clients";
+import type { Client } from "@/types/database";
 
-export function NewClientForm() {
+export function NewClientForm({ client }: { client?: Client }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -15,7 +16,7 @@ export function NewClientForm() {
     setPending(true);
     const form = new FormData(e.currentTarget);
 
-    const { data, error: err } = await createClient({
+    const payload = {
       company_name: String(form.get("company_name") ?? ""),
       address1: String(form.get("address1") ?? "") || null,
       address2: String(form.get("address2") ?? "") || null,
@@ -33,17 +34,22 @@ export function NewClientForm() {
         : null,
       default_vat_exempt: form.get("default_vat_exempt") === "on",
       notes: String(form.get("notes") ?? "") || null,
-      is_active: true,
       marketing_opt_in: form.get("marketing_opt_in") === "on",
       marketing_opted_in_at:
-        form.get("marketing_opt_in") === "on"
-          ? new Date().toISOString()
-          : null,
-    });
+        form.get("marketing_opt_in") !== "on"
+          ? null
+          : client?.marketing_opt_in
+            ? client.marketing_opted_in_at
+            : new Date().toISOString(),
+    };
+
+    const { data, error: err } = client
+      ? await updateClient(client.id, payload)
+      : await createClient({ ...payload, is_active: true });
 
     setPending(false);
     if (err || !data) {
-      setError(err ?? "Could not create client");
+      setError(err ?? "Could not save client");
       return;
     }
     router.push("/clients");
@@ -58,6 +64,7 @@ export function NewClientForm() {
         </label>
         <input
           name="company_name"
+          defaultValue={client?.company_name ?? ""}
           required
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
@@ -69,6 +76,7 @@ export function NewClientForm() {
           </label>
           <input
             name="address1"
+            defaultValue={client?.address1 ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -78,6 +86,7 @@ export function NewClientForm() {
           </label>
           <input
             name="address2"
+            defaultValue={client?.address2 ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -85,6 +94,7 @@ export function NewClientForm() {
           <label className="block text-sm font-medium text-slate-700">Town</label>
           <input
             name="town"
+            defaultValue={client?.town ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -94,6 +104,7 @@ export function NewClientForm() {
           </label>
           <input
             name="postcode"
+            defaultValue={client?.postcode ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -105,6 +116,7 @@ export function NewClientForm() {
           </label>
           <input
             name="contact_name"
+            defaultValue={client?.contact_name ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -114,6 +126,7 @@ export function NewClientForm() {
           </label>
           <input
             name="contact_email"
+            defaultValue={client?.contact_email ?? ""}
             type="email"
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
@@ -124,6 +137,7 @@ export function NewClientForm() {
           </label>
           <input
             name="contact_number"
+            defaultValue={client?.contact_number ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -133,6 +147,7 @@ export function NewClientForm() {
           </label>
           <input
             name="payment_terms_days"
+            defaultValue={client?.payment_terms_days ?? ""}
             type="number"
             min="0"
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -146,6 +161,7 @@ export function NewClientForm() {
           </label>
           <input
             name="site_address1"
+            defaultValue={client?.site_address1 ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -155,6 +171,7 @@ export function NewClientForm() {
           </label>
           <input
             name="site_address2"
+            defaultValue={client?.site_address2 ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -164,6 +181,7 @@ export function NewClientForm() {
           </label>
           <input
             name="site_town"
+            defaultValue={client?.site_town ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -173,6 +191,7 @@ export function NewClientForm() {
           </label>
           <input
             name="site_postcode"
+            defaultValue={client?.site_postcode ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
@@ -181,6 +200,7 @@ export function NewClientForm() {
         <input
           id="default_vat_exempt"
           name="default_vat_exempt"
+          defaultChecked={client?.default_vat_exempt ?? false}
           type="checkbox"
           className="rounded border-slate-300"
         />
@@ -195,6 +215,7 @@ export function NewClientForm() {
         <input
           id="marketing_opt_in"
           name="marketing_opt_in"
+          defaultChecked={client?.marketing_opt_in ?? false}
           type="checkbox"
           className="rounded border-slate-300"
         />
@@ -207,6 +228,7 @@ export function NewClientForm() {
         <label className="block text-sm font-medium text-slate-700">Notes</label>
         <textarea
           name="notes"
+          defaultValue={client?.notes ?? ""}
           rows={3}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
@@ -221,7 +243,7 @@ export function NewClientForm() {
         disabled={pending}
         className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Create client"}
+        {pending ? "Saving…" : client ? "Save changes" : "Create client"}
       </button>
     </form>
   );

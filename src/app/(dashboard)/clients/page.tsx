@@ -80,13 +80,14 @@ export default async function ClientsPage({
               <th className="px-4 py-3 text-left font-medium text-slate-700">
                 Active jobs
               </th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-slate-500"
                 >
                   No clients match your search.
@@ -119,6 +120,14 @@ export default async function ClientsPage({
                     </td>
                     <td className="px-4 py-3 text-slate-700 tabular-nums">
                       {c.active_jobs_count ?? 0}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/clients/${c.id}/edit`}
+                        className="text-sm font-medium text-slate-700 hover:text-slate-900 hover:underline"
+                      >
+                        Edit
+                      </Link>
                     </td>
                   </tr>
                 ),
