@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createClient, updateClient } from "@/actions/clients";
 import type { Client } from "@/types/database";
 
@@ -9,6 +9,22 @@ export function NewClientForm({ client }: { client?: Client }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function copyBillingToSite() {
+    const f = formRef.current;
+    if (!f) return;
+    for (const [from, to] of [
+      ["address1", "site_address1"],
+      ["address2", "site_address2"],
+      ["town", "site_town"],
+      ["postcode", "site_postcode"],
+    ]) {
+      (f.elements.namedItem(to) as HTMLInputElement).value = (
+        f.elements.namedItem(from) as HTMLInputElement
+      ).value;
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,7 +73,7 @@ export function NewClientForm({ client }: { client?: Client }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 max-w-2xl space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="mt-8 max-w-2xl space-y-4">
       <div>
         <label className="block text-sm font-medium text-slate-700">
           Company name
@@ -69,6 +85,11 @@ export function NewClientForm({ client }: { client?: Client }) {
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>
+      <fieldset className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+        <legend className="px-2 text-sm font-semibold text-slate-900">Billing address</legend>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-600">Where invoices are sent. This is the client&apos;s registered or office address.</p>
+        </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
@@ -109,6 +130,7 @@ export function NewClientForm({ client }: { client?: Client }) {
           />
         </div>
       </div>
+      </fieldset>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
@@ -154,6 +176,18 @@ export function NewClientForm({ client }: { client?: Client }) {
           />
         </div>
       </div>
+      <fieldset className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+        <legend className="px-2 text-sm font-semibold text-slate-900">Default site address</legend>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-600">Where the work is normally carried out. Leave blank if it is the same as the billing address.</p>
+          <button
+            type="button"
+            onClick={copyBillingToSite}
+            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Copy from billing address
+          </button>
+        </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
@@ -196,6 +230,7 @@ export function NewClientForm({ client }: { client?: Client }) {
           />
         </div>
       </div>
+      </fieldset>
       <div className="flex items-center gap-2">
         <input
           id="default_vat_exempt"
